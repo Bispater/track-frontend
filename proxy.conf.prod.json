@@ -1,0 +1,13 @@
+{
+  "/api": {
+    "target": "https://proaseg.cl",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  },
+  "/login": {
+    "target": "https://proaseg.cl",
+    "secure": true,
+    "changeOrigin": true
+  }
+}

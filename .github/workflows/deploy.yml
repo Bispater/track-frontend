@@ -1,0 +1,64 @@
+name: Build & Deploy track-frontend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build (production)
+        run: npm run build
+      - name: Empaquetar dist/
+        run: cd dist && tar czf ../track-frontend-dist.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: track-frontend-dist.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+      - name: Copiar dist al VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          source: track-frontend-dist.tar.gz
+          target: /tmp
+      - name: Reemplazar public/ del backend
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script: |
+            set -e
+            cd /opt/track-service
+            # Backup del public actual por si hay que rollback rápido
+            rm -rf public.bak
+            if [ -d public ]; then mv public public.bak; fi
+            mkdir -p public
+            tar xzf /tmp/track-frontend-dist.tar.gz -C public
+            rm /tmp/track-frontend-dist.tar.gz
+            # Re-arrancar el container para que tome los archivos nuevos
+            docker compose restart app || true
+            echo "→ deploy listo · estado:"
+            docker compose ps
