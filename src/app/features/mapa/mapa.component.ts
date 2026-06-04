@@ -3,6 +3,20 @@ import * as L from 'leaflet';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { IconComponent } from '../../shared/icon.component';
 
+// Leaflet busca sus imágenes de marcador en la raíz del sitio y da 404 al empaquetar.
+// Las servimos desde /assets/leaflet (ver angular.json) y fijamos el icono por defecto.
+const leafletDefaultIcon = L.icon({
+  iconRetinaUrl: '/assets/leaflet/marker-icon-2x.png',
+  iconUrl: '/assets/leaflet/marker-icon.png',
+  shadowUrl: '/assets/leaflet/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41],
+});
+L.Marker.prototype.options.icon = leafletDefaultIcon;
+
 @Component({
   selector: 'app-mapa',
   standalone: true,
