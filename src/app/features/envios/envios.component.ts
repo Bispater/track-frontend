@@ -59,6 +59,20 @@ const RETENTION_DAYS = 7;
           <option value="rejected">⚠ Rechazo lógico</option>
           <option value="error">✗ Errores</option>
         </select>
+
+        <div class="flex items-center gap-1.5">
+          <label class="text-xs text-text-dim">Desde</label>
+          <input class="input" type="date" [value]="dateFrom()" [max]="dateTo() || todayStr"
+            (change)="dateFrom.set(inputV($event))" />
+          <label class="text-xs text-text-dim">Hasta</label>
+          <input class="input" type="date" [value]="dateTo()" [min]="dateFrom()" [max]="todayStr"
+            (change)="dateTo.set(inputV($event))" />
+          <button class="btn btn-ghost px-2.5 py-1.5 text-xs" (click)="lastWeek()" title="Últimos 7 días">7 días</button>
+          @if (dateFrom() || dateTo()) {
+            <button class="btn btn-ghost px-2 py-1.5 text-xs" (click)="clearDates()" title="Limpiar fechas">✕</button>
+          }
+        </div>
+
         @if (openKeys().size > 0) {
           <small class="text-warn ml-2 flex items-center gap-1">
             <app-icon name="alert" [size]="12" />
@@ -157,6 +171,8 @@ export class EnviosComponent implements OnInit, OnDestroy {
   search = signal('');
   serviceFilter = signal('');
   resultFilter = signal('');
+  dateFrom = signal('');   // 'YYYY-MM-DD' (filtra por fecha de envío)
+  dateTo = signal('');
   visibleCount = signal(PAGE_SIZE);
   openKeys = signal(new Set<string>());
   fmtDate = fmtDate;
@@ -168,12 +184,19 @@ export class EnviosComponent implements OnInit, OnDestroy {
     const q = this.search().trim().toLowerCase();
     const sf = this.serviceFilter();
     const rf = this.resultFilter();
+    const from = this.dateFrom() ? new Date(this.dateFrom() + 'T00:00:00').getTime() : null;
+    const to = this.dateTo() ? new Date(this.dateTo() + 'T23:59:59.999').getTime() : null;
     return this.entries().filter((e) => {
       if (q && !String(e.patente || '').toLowerCase().includes(q)) return false;
       if (sf && e.service !== sf) return false;
       if (rf === 'accepted' && !e.accepted) return false;
       if (rf === 'rejected' && (!e.ok || e.accepted)) return false;
       if (rf === 'error' && e.ok) return false;
+      if (from != null || to != null) {
+        const t = new Date(e.ts).getTime();
+        if (from != null && t < from) return false;
+        if (to != null && t > to) return false;
+      }
       return true;
     });
   });
@@ -196,6 +219,23 @@ export class EnviosComponent implements OnInit, OnDestroy {
     if (this.timer) clearInterval(this.timer);
     this.hkSub?.unsubscribe();
   }
+
+  // ---- Filtros de fecha ----
+  private toDateStr(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  get todayStr() { return this.toDateStr(new Date()); }
+  lastWeek() {
+    const now = new Date();
+    const from = new Date(now.getTime() - 6 * 86400000); // 7 días inclusive (hoy + 6 atrás)
+    this.dateFrom.set(this.toDateStr(from));
+    this.dateTo.set(this.toDateStr(now));
+    this.visibleCount.set(PAGE_SIZE);
+  }
+  clearDates() { this.dateFrom.set(''); this.dateTo.set(''); }
 
   loadMore() { this.visibleCount.update((n) => Math.min(n + PAGE_SIZE, MAX_VISIBLE)); }
   toggleOpen(e: UnifiedSend) {
