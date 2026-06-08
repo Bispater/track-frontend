@@ -27,6 +27,9 @@ export interface HistoryEntry {
   error?: string;
   groupId?: string;
   url?: string;
+  skipped?: boolean;        // entrada omitida (misma posición que la anterior)
+  message?: string;         // ej. "5: Registro duplicado" (Wise)
+  estados?: number[];       // códigos de estado Wise
 }
 
 /**

@@ -107,9 +107,7 @@ const RETENTION_DAYS = 7;
                 <td>{{ e.speed ?? '—' }}</td>
                 <td><app-badge kind="muted">{{ e.service }}</app-badge></td>
                 <td>
-                  <app-badge [kind]="e.ok ? (e.accepted ? 'ok' : 'warn') : 'err'">
-                    {{ e.error ? 'error' : (e.accepted ? '✓ aceptado' : (e.ok ? (e.response?.message || 'rechazado') : 'HTTP ' + (e.status || 0))) }}
-                  </app-badge>
+                  <app-badge [kind]="statusKind(e)">{{ statusLabel(e) }}</app-badge>
                 </td>
                 <td>
                   <button class="btn btn-ghost flex items-center justify-center px-2 py-1" (click)="$event.stopPropagation(); toggleOpen(e)" title="Ver detalle">
@@ -268,6 +266,24 @@ export class EnviosComponent implements OnInit, OnDestroy {
     });
   }
   inputV(ev: Event): string { return (ev.target as HTMLInputElement).value; }
+
+  // Color de la insignia de estado
+  statusKind(e: UnifiedSend): 'ok' | 'warn' | 'err' | 'muted' {
+    if (e.error) return 'err';
+    if (e.accepted) return 'ok';
+    if (e.skipped) return 'muted';
+    if (!e.ok) return 'err';
+    return 'warn'; // rechazo lógico / duplicado
+  }
+  // Texto claro: aceptado / sin cambios / duplicado / rechazado / error
+  statusLabel(e: UnifiedSend): string {
+    if (e.error) return 'error';
+    if (e.accepted) return '✓ aceptado';
+    if (e.skipped) return 'sin cambios';
+    if (e.message) return e.message.replace(/^\d+:\s*/, ''); // "5: Registro duplicado" → "Registro duplicado"
+    if (e.ok) return e.response?.message || 'rechazado';
+    return 'HTTP ' + (e.status || 0);
+  }
 
   async refresh() {
     const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann'];
