@@ -60,16 +60,19 @@ const RETENTION_DAYS = 7;
           <option value="error">✗ Errores</option>
         </select>
 
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button class="btn btn-ghost px-2.5 py-1.5 text-xs" [class.selected-day]="isDay(0)" (click)="selectDay(0)" title="Solo hoy">Hoy</button>
+          <button class="btn btn-ghost px-2.5 py-1.5 text-xs" [class.selected-day]="isDay(1)" (click)="selectDay(1)" title="Solo ayer">Ayer</button>
+          <button class="btn btn-ghost px-2.5 py-1.5 text-xs" (click)="lastWeek()" title="Últimos 7 días">7 días</button>
+          <span class="text-text-dim text-xs mx-1">|</span>
           <label class="text-xs text-text-dim">Desde</label>
           <input class="input" type="date" [value]="dateFrom()" [max]="dateTo() || todayStr"
             (change)="dateFrom.set(inputV($event))" />
           <label class="text-xs text-text-dim">Hasta</label>
           <input class="input" type="date" [value]="dateTo()" [min]="dateFrom()" [max]="todayStr"
             (change)="dateTo.set(inputV($event))" />
-          <button class="btn btn-ghost px-2.5 py-1.5 text-xs" (click)="lastWeek()" title="Últimos 7 días">7 días</button>
           @if (dateFrom() || dateTo()) {
-            <button class="btn btn-ghost px-2 py-1.5 text-xs" (click)="clearDates()" title="Limpiar fechas">✕</button>
+            <button class="btn btn-ghost px-2 py-1.5 text-xs" (click)="clearDates()" title="Limpiar filtro de fecha">✕ limpiar</button>
           }
         </div>
 
@@ -160,6 +163,13 @@ const RETENTION_DAYS = 7;
       </div>
     </div>
   `,
+  styles: [`
+    .selected-day {
+      background: var(--accent) !important;
+      color: #fff !important;
+      border-color: var(--accent) !important;
+    }
+  `],
 })
 export class EnviosComponent implements OnInit, OnDestroy {
   @ViewChild('searchInput') searchInput?: ElementRef<HTMLInputElement>;
@@ -228,6 +238,18 @@ export class EnviosComponent implements OnInit, OnDestroy {
     return `${y}-${m}-${day}`;
   }
   get todayStr() { return this.toDateStr(new Date()); }
+  // Filtra un único día (offset 0 = hoy, 1 = ayer, …)
+  selectDay(offset: number) {
+    const s = this.toDateStr(new Date(Date.now() - offset * 86400000));
+    this.dateFrom.set(s);
+    this.dateTo.set(s);
+    this.visibleCount.set(PAGE_SIZE);
+  }
+  // ¿El filtro actual es exactamente ese día? (para resaltar el botón activo)
+  isDay(offset: number): boolean {
+    const s = this.toDateStr(new Date(Date.now() - offset * 86400000));
+    return this.dateFrom() === s && this.dateTo() === s;
+  }
   lastWeek() {
     const now = new Date();
     const from = new Date(now.getTime() - 6 * 86400000); // 7 días inclusive (hoy + 6 atrás)
