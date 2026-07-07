@@ -73,7 +73,7 @@ export class ApiService {
   }
 }
 
-export type ClientId = 'falabella' | 'wise' | 'drivin' | 'bermann';
+export type ClientId = 'falabella' | 'wise' | 'drivin' | 'bermann' | 'ds';
 
 export interface GroupConfig {
   id: string;

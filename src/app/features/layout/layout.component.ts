@@ -142,6 +142,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
         { path: '/wise', label: 'Wise', sub: 'Wisetrack', icon: 'package' },
         { path: '/drivin', label: 'Drivin', sub: 'Posiciones', icon: 'box' },
         { path: '/bermann', label: 'Bermann', sub: 'Concentrador', icon: 'inbox' },
+        { path: '/ds', label: 'DS', sub: 'postDataGPS', icon: 'package' },
       ],
     },
     {

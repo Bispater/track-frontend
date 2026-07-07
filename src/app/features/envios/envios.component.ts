@@ -52,6 +52,7 @@ const RETENTION_DAYS = 7;
           <option value="Wise">Wise</option>
           <option value="Drivin">Drivin</option>
           <option value="Bermann">Bermann</option>
+          <option value="DS">DS</option>
         </select>
         <select class="input" [value]="resultFilter()" (change)="resultFilter.set(inputV($event))">
           <option value="">Todos los resultados</option>
@@ -286,8 +287,8 @@ export class EnviosComponent implements OnInit, OnDestroy {
   }
 
   async refresh() {
-    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann'];
-    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann' };
+    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds'];
+    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS' };
     try {
       const results = await Promise.all(
         clients.map((c) => firstValueFrom(this.api.clientHistory(c, 500)).catch(() => ({ entries: [] as HistoryEntry[] })))
@@ -308,7 +309,9 @@ export class EnviosComponent implements OnInit, OnDestroy {
     const key = `${client}-${e.ts}-${e.vehicleId}`;
     if (client === 'falabella') return { ...e, kind: client, service, key, patente: e.payload?.vehicleId || e.vehicleId, eventTs: e.payload?.timestamp, speed: e.payload?.speed?.value ?? null };
     if (client === 'wise') { const p0 = e.payload?.posicion?.[0]; return { ...e, kind: client, service, key, patente: p0?.patente || e.vehicleId, eventTs: p0?.fecha_hora, speed: p0?.velocidad ?? null }; }
-    if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, kind: client, service, key, patente: p0?.vehicle_code || e.vehicleId, eventTs: p0?.timestamp ? new Date(Number(p0.timestamp) * 1000).toISOString() : null, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
+    if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, kind: client, service, key, patente: p0?.vehicle_code || e.vehicleId, eventTs: p0?.timestamp ? new Date(Number(p0.timestamp)).toISOString() : null, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
+    if (client === 'ds') return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fechahora, speed: e.payload?.velocidad ?? null };
+    // bermann
     return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fecha, speed: e.payload?.velocidad ?? null };
   }
 }
