@@ -3,6 +3,8 @@ import { authGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   { path: 'login', title: 'Iniciar sesión', loadComponent: () => import('./features/login/login.component').then((m) => m.LoginComponent) },
+  // Informe imprimible por cliente (documento A4, sin layout de la app)
+  { path: 'reporte', title: 'Informe de servicio', canActivate: [authGuard], loadComponent: () => import('./features/reporte/reporte.component').then((m) => m.ReporteComponent) },
   {
     path: '',
     canActivate: [authGuard],

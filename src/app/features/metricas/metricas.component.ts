@@ -39,6 +39,14 @@ interface TipRow { label: string; value: number; color: string; }
           <button type="button" [class.on]="hours() === r.hours" (click)="setRange(r.hours)">{{ r.label }}</button>
         }
       </div>
+      @if (activeClients().length) {
+        <div class="rep-box">
+          <select class="rep-sel" [value]="repClient()" (change)="repClient.set($any($event.target).value)">
+            @for (c of activeClients(); track c) { <option [value]="c">{{ label(c) }}</option> }
+          </select>
+          <button class="rep-btn" (click)="openReport()" title="Informe imprimible del cliente para el rango elegido">Informe PDF</button>
+        </div>
+      }
       <div class="flex-1"></div>
       <span class="text-xs text-text-dim">se conservan {{ retentionDays }} días de historial</span>
       <button class="icon-btn" (click)="refresh()" title="Actualizar"><app-icon name="refresh" [size]="16" /></button>
@@ -282,6 +290,16 @@ interface TipRow { label: string; value: number; color: string; }
     }
     .seg-range button + button { border-left: 1px solid var(--border); }
     .seg-range button.on { background: var(--accent); color: #fff; }
+    .rep-box { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .rep-sel {
+      background: var(--bg-elev); color: var(--text); border: none; padding: 6px 8px;
+      font-size: 13px; font-weight: 600; outline: none;
+    }
+    .rep-btn {
+      padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+      background: var(--bg-soft); color: var(--text); border: none; border-left: 1px solid var(--border);
+    }
+    .rep-btn:hover { background: var(--accent); color: #fff; }
     .kpi { padding: 14px 16px; }
     .kpi-label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
     .kpi-value { font-size: 27px; font-weight: 650; line-height: 1.25; margin: 2px 0; }
@@ -349,6 +367,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
   loading = signal(true);
   refreshing = signal(false);
   error = signal<string | null>(null);
+  repClient = signal<string>('');
   showTable = signal(false);
   hoverIdx = signal(-1);
   tipX = signal(0);
@@ -540,6 +559,12 @@ export class MetricasComponent implements OnInit, OnDestroy {
   plate(vid: string) {
     const v = this.store.list().find((x) => x.id === vid);
     return v?.plate || v?.name || vid.slice(0, 8);
+  }
+
+  openReport() {
+    const c = this.repClient() || this.activeClients()[0];
+    if (!c) return;
+    window.open(`${location.pathname}#/reporte?client=${encodeURIComponent(c)}&hours=${this.hours()}`, '_blank');
   }
 
   setRange(h: number) {
