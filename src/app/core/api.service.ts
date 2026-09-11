@@ -56,7 +56,7 @@ export class ApiService {
   clientGroups(client: ClientId): Observable<{ groups: Record<string, GroupConfig> }> {
     return this.http.get<{ groups: Record<string, GroupConfig> }>(`/api/${client}/groups`);
   }
-  updateClientGroup(client: ClientId, id: string, body: Partial<GroupConfig>) {
+  updateClientGroup(client: ClientId, id: string, body: Partial<GroupConfig> & { confirmPassword?: string }) {
     return this.http.put<GroupConfig>(`/api/${client}/groups/${encodeURIComponent(id)}`, body);
   }
   previewClient(client: ClientId, vehicleId: string) {

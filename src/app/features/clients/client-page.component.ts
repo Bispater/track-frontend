@@ -86,8 +86,8 @@ import { firstValueFrom } from 'rxjs';
                       <div class="flex items-center gap-3 p-2.5 mb-3 rounded flex-wrap" style="background: var(--bg-soft); border: 1px solid var(--border);">
                         <span class="font-semibold text-sm">Entorno de envío</span>
                         <div class="seg">
-                          <button type="button" [class.on-test]="activeEnv(g) === 'test'" (click)="updateGroup(g, { env: 'test' })">TEST</button>
-                          <button type="button" [class.on-prod]="activeEnv(g) === 'prod'" (click)="updateGroup(g, { env: 'prod' })">PROD</button>
+                          <button type="button" [class.on-test]="activeEnv(g) === 'test'" (click)="setEnv(g, 'test')">TEST</button>
+                          <button type="button" [class.on-prod]="activeEnv(g) === 'prod'" (click)="setEnv(g, 'prod')">PROD</button>
                         </div>
                         @if (activeEnv(g) === 'prod') {
                           <span class="text-xs" style="color:#ef4444;">⚠ enviando a producción real</span>
@@ -176,37 +176,56 @@ export class ClientPageComponent implements OnInit {
   groupList = computed(() => Object.values(this.groups()));
   envHint = computed(() => this.client().toUpperCase());
 
-  // ¿Este cliente distingue Test vs Producción? (solo Falabella hoy)
-  hasTestProd = computed(() => this.client() === 'falabella');
+  // ¿Este cliente distingue Test vs Producción con switch por grupo? (Falabella y Qanalytics)
+  hasTestProd = computed(() => this.client() === 'falabella' || this.client() === 'qanalytics');
 
   // Endpoints disponibles del cliente, con su entorno, URL y si tiene credenciales.
   endpoints = computed<{ env: 'test' | 'prod'; label: string; url: string; configured: boolean }[]>(() => {
     const cfg = this.cfg() || {};
-    if (this.client() === 'falabella') {
+    if (this.hasTestProd()) {
       return [
-        { env: 'test', label: 'Test (UAT)', url: cfg.testUrl || '', configured: !!cfg.apikeyTestConfigured },
+        { env: 'test', label: this.client() === 'falabella' ? 'Test (UAT)' : 'Test', url: cfg.testUrl || '', configured: !!cfg.apikeyTestConfigured },
         { env: 'prod', label: 'Producción', url: cfg.prodUrl || '', configured: !!cfg.apikeyProdConfigured },
       ];
     }
-    // Wise / Drivin / Bermann / Qanalytics: una sola URL. Por defecto es producción,
-    // salvo que el backend indique env 'test' (ej: Qanalytics apuntando a la API _test).
+    // Wise / Drivin / Bermann / DS: una sola URL. Por defecto es producción,
+    // salvo que el backend indique env 'test'.
     const configured = !!(cfg.tokenConfigured ?? cfg.keyConfigured ?? cfg.credentialsConfigured);
     const env: 'test' | 'prod' = cfg.env === 'test' ? 'test' : 'prod';
     return [{ env, label: env === 'test' ? 'Test' : 'Producción', url: cfg.url || '', configured }];
   });
 
-  // Entorno activo de un grupo (Falabella usa g.env; default 'test').
-  // Otros clientes: el env que declare su config (ej: Qanalytics test), default prod.
+  // Entorno activo de un grupo (clientes test/prod usan g.env; default 'test').
+  // Otros clientes: el env que declare su config, default prod.
   activeEnv(g: GroupConfig): 'test' | 'prod' {
-    if (this.client() !== 'falabella') return (this.cfg() || {}).env === 'test' ? 'test' : 'prod';
+    if (!this.hasTestProd()) return (this.cfg() || {}).env === 'test' ? 'test' : 'prod';
     return g.env === 'prod' ? 'prod' : 'test';
   }
   // URL a la que realmente se envía según el entorno activo del grupo.
   activeUrl(g: GroupConfig): { env: 'test' | 'prod'; url: string } {
     const cfg = this.cfg() || {};
-    if (this.client() !== 'falabella') return { env: this.activeEnv(g), url: cfg.url || '' };
+    if (!this.hasTestProd()) return { env: this.activeEnv(g), url: cfg.url || '' };
     const env = this.activeEnv(g);
     return { env, url: env === 'prod' ? (cfg.prodUrl || '') : (cfg.testUrl || '') };
+  }
+
+  // Cambio de entorno de un grupo. Pasar a PROD en Qanalytics re-confirma la contraseña del login.
+  async setEnv(g: GroupConfig, env: 'test' | 'prod') {
+    if (this.activeEnv(g) === env) return;
+    const body: Partial<GroupConfig> & { confirmPassword?: string } = { env };
+    if (env === 'prod' && this.client() === 'qanalytics' && (this.cfg() || {}).prodRequiresPassword) {
+      const pass = window.prompt(`Vas a enviar el grupo "${g.name}" a PRODUCCIÓN real.\nConfirma tu contraseña de acceso:`);
+      if (pass == null || pass === '') return;
+      body.confirmPassword = pass;
+    }
+    try {
+      const updated = await firstValueFrom(this.api.updateClientGroup(this.client(), g.id, body));
+      this.groups.update((cur) => ({ ...cur, [g.id]: { ...cur[g.id], ...updated } }));
+      if (env === 'prod') this.toast.warn(`Grupo "${g.name}" ahora envía a PRODUCCIÓN`);
+      else this.toast.ok(`Grupo "${g.name}" ahora envía a test`);
+    } catch (err: any) {
+      this.toast.err(err?.error?.error || err?.message || 'No se pudo cambiar el entorno');
+    }
   }
 
   async ngOnInit() {
