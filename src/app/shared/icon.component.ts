@@ -4,7 +4,7 @@ export type IconName =
   | 'dashboard' | 'truck' | 'map' | 'send' | 'inbox' | 'logout' | 'chevron-right'
   | 'check' | 'alert' | 'x' | 'refresh' | 'search' | 'plus' | 'eye' | 'copy'
   | 'expand' | 'collapse' | 'building' | 'users' | 'box' | 'package' | 'route'
-  | 'sun' | 'moon' | 'monitor' | 'bell' | 'globe' | 'link';
+  | 'sun' | 'moon' | 'monitor' | 'bell' | 'globe' | 'link' | 'chart';
 
 const PATHS: Record<IconName, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
@@ -35,6 +35,7 @@ const PATHS: Record<IconName, string> = {
   bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
   globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18',
   link: 'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
+  chart: 'M3 3v18h18M8 17V9M13 17V5M18 17v-7',
 };
 
 @Component({

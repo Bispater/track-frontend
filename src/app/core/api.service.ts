@@ -68,6 +68,7 @@ export class ApiService {
   sendGroup(client: ClientId, groupId: string) {
     return this.http.post<{ results: HistoryEntry[] }>(`/api/${client}/groups/${encodeURIComponent(groupId)}/send`, {});
   }
+  sendStats(hours: number) { return this.http.get<any>(`/api/stats/sends?hours=${hours}`); }
   clientHistory(client: ClientId, limit = 300) {
     return this.http.get<{ entries: HistoryEntry[] }>(`/api/${client}/history?limit=${limit}`);
   }
