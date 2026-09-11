@@ -134,7 +134,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
       title: 'Datos',
       items: [
         { path: '/resumen', label: 'Resumen', sub: 'Estado general', icon: 'dashboard' },
-        { path: '/metricas', label: 'Métricas', sub: 'Gráficos y KPIs', icon: 'chart' },
+        // Métricas oculto temporalmente — descomentar junto a la ruta en app.routes.ts
+        // { path: '/metricas', label: 'Métricas', sub: 'Gráficos y KPIs', icon: 'chart' },
         { path: '/vehiculos', label: 'Vehículos', sub: 'Flota y posiciones', icon: 'truck' },
         { path: '/mapa', label: 'Mapa', sub: 'Ubicación en vivo', icon: 'map' },
       ],

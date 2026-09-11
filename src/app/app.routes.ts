@@ -10,7 +10,8 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'resumen' },
       { path: 'resumen', title: 'Resumen', loadComponent: () => import('./features/resumen/resumen.component').then((m) => m.ResumenComponent) },
-      { path: 'metricas', title: 'Métricas', loadComponent: () => import('./features/metricas/metricas.component').then((m) => m.MetricasComponent) },
+      // Métricas oculto temporalmente (carga lenta / datos en 0 intermitentes) — descomentar junto al ítem del menú en layout.component.ts
+      // { path: 'metricas', title: 'Métricas', loadComponent: () => import('./features/metricas/metricas.component').then((m) => m.MetricasComponent) },
       { path: 'vehiculos', title: 'Vehículos', loadComponent: () => import('./features/vehiculos/vehiculos.component').then((m) => m.VehiculosComponent) },
       { path: 'mapa', title: 'Mapa', loadComponent: () => import('./features/mapa/mapa.component').then((m) => m.MapaComponent) },
       { path: 'envios', title: 'Envíos', loadComponent: () => import('./features/envios/envios.component').then((m) => m.EnviosComponent) },
