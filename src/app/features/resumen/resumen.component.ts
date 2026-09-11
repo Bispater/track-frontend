@@ -185,8 +185,8 @@ export class ResumenComponent implements OnInit {
 
   private async loadAllHistories() {
     this.loadingSends.set(true);
-    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds'];
-    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS' };
+    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
+    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics' };
     try {
       const results = await Promise.all(
         clients.map((c) =>

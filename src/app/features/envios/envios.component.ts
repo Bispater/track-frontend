@@ -53,6 +53,7 @@ const RETENTION_DAYS = 7;
           <option value="Drivin">Drivin</option>
           <option value="Bermann">Bermann</option>
           <option value="DS">DS</option>
+          <option value="Qanalytics">Qanalytics</option>
         </select>
         <select class="input" [value]="resultFilter()" (change)="resultFilter.set(inputV($event))">
           <option value="">Todos los resultados</option>
@@ -287,8 +288,8 @@ export class EnviosComponent implements OnInit, OnDestroy {
   }
 
   async refresh() {
-    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds'];
-    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS' };
+    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
+    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics' };
     try {
       const results = await Promise.all(
         clients.map((c) => firstValueFrom(this.api.clientHistory(c, 500)).catch(() => ({ entries: [] as HistoryEntry[] })))

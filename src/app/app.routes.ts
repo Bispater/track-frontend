@@ -18,6 +18,7 @@ export const routes: Routes = [
       { path: 'drivin', loadComponent: () => import('./features/clients/client-page.component').then((m) => m.ClientPageComponent), data: { client: 'drivin', title: 'Drivin · envío de posiciones' } },
       { path: 'bermann', loadComponent: () => import('./features/clients/client-page.component').then((m) => m.ClientPageComponent), data: { client: 'bermann', title: 'Bermann · envío de posiciones' } },
       { path: 'ds', loadComponent: () => import('./features/clients/client-page.component').then((m) => m.ClientPageComponent), data: { client: 'ds', title: 'DS · envío de posiciones' } },
+      { path: 'qanalytics', loadComponent: () => import('./features/clients/client-page.component').then((m) => m.ClientPageComponent), data: { client: 'qanalytics', title: 'Qanalytics · envío de posiciones' } },
     ],
   },
   { path: '**', redirectTo: '' },
