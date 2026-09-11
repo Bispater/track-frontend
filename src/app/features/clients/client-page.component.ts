@@ -209,17 +209,11 @@ export class ClientPageComponent implements OnInit {
     return { env, url: env === 'prod' ? (cfg.prodUrl || '') : (cfg.testUrl || '') };
   }
 
-  // Cambio de entorno de un grupo. Pasar a PROD en Qanalytics re-confirma la contraseña del login.
+  // Cambio de entorno de un grupo, con aviso del resultado.
   async setEnv(g: GroupConfig, env: 'test' | 'prod') {
     if (this.activeEnv(g) === env) return;
-    const body: Partial<GroupConfig> & { confirmPassword?: string } = { env };
-    if (env === 'prod' && this.client() === 'qanalytics' && (this.cfg() || {}).prodRequiresPassword) {
-      const pass = window.prompt(`Vas a enviar el grupo "${g.name}" a PRODUCCIÓN real.\nConfirma tu contraseña de acceso:`);
-      if (pass == null || pass === '') return;
-      body.confirmPassword = pass;
-    }
     try {
-      const updated = await firstValueFrom(this.api.updateClientGroup(this.client(), g.id, body));
+      const updated = await firstValueFrom(this.api.updateClientGroup(this.client(), g.id, { env }));
       this.groups.update((cur) => ({ ...cur, [g.id]: { ...cur[g.id], ...updated } }));
       if (env === 'prod') this.toast.warn(`Grupo "${g.name}" ahora envía a PRODUCCIÓN`);
       else this.toast.ok(`Grupo "${g.name}" ahora envía a test`);
