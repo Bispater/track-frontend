@@ -165,20 +165,23 @@ export class ClientPageComponent implements OnInit {
         { env: 'prod', label: 'Producción', url: cfg.prodUrl || '', configured: !!cfg.apikeyProdConfigured },
       ];
     }
-    // Wise / Drivin / Bermann: una sola URL (producción)
+    // Wise / Drivin / Bermann / Qanalytics: una sola URL. Por defecto es producción,
+    // salvo que el backend indique env 'test' (ej: Qanalytics apuntando a la API _test).
     const configured = !!(cfg.tokenConfigured ?? cfg.keyConfigured ?? cfg.credentialsConfigured);
-    return [{ env: 'prod', label: 'Producción', url: cfg.url || '', configured }];
+    const env: 'test' | 'prod' = cfg.env === 'test' ? 'test' : 'prod';
+    return [{ env, label: env === 'test' ? 'Test' : 'Producción', url: cfg.url || '', configured }];
   });
 
-  // Entorno activo de un grupo (Falabella usa g.env; default 'test'). Otros: siempre prod.
+  // Entorno activo de un grupo (Falabella usa g.env; default 'test').
+  // Otros clientes: el env que declare su config (ej: Qanalytics test), default prod.
   activeEnv(g: GroupConfig): 'test' | 'prod' {
-    if (this.client() !== 'falabella') return 'prod';
+    if (this.client() !== 'falabella') return (this.cfg() || {}).env === 'test' ? 'test' : 'prod';
     return g.env === 'prod' ? 'prod' : 'test';
   }
   // URL a la que realmente se envía según el entorno activo del grupo.
   activeUrl(g: GroupConfig): { env: 'test' | 'prod'; url: string } {
     const cfg = this.cfg() || {};
-    if (this.client() !== 'falabella') return { env: 'prod', url: cfg.url || '' };
+    if (this.client() !== 'falabella') return { env: this.activeEnv(g), url: cfg.url || '' };
     const env = this.activeEnv(g);
     return { env, url: env === 'prod' ? (cfg.prodUrl || '') : (cfg.testUrl || '') };
   }
