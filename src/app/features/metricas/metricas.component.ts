@@ -44,9 +44,21 @@ interface TipRow { label: string; value: number; color: string; }
       <button class="icon-btn" (click)="refresh()" title="Actualizar"><app-icon name="refresh" [size]="16" /></button>
     </div>
 
+    @if (error()) {
+      <div class="card mb-4" style="border-color: var(--err);">
+        <div class="card-body flex items-center gap-3">
+          <app-icon name="alert" [size]="18" />
+          <div class="flex-1">
+            <div class="font-semibold">No se pudieron cargar las métricas</div>
+            <div class="text-xs text-text-dim">{{ error() }}</div>
+          </div>
+          <button class="btn" (click)="refresh()">Reintentar</button>
+        </div>
+      </div>
+    }
     @if (loading()) {
       <app-loading-card msg="Cargando métricas…" />
-    } @else {
+    } @else if (!error()) {
       <div [style.opacity]="refreshing() ? 0.55 : 1" style="transition: opacity 0.15s;">
 
         <!-- KPI row -->
@@ -188,6 +200,31 @@ interface TipRow { label: string; value: number; color: string; }
             </div>
           </div>
 
+          <!-- Disponibilidad por cliente: % de horas/días del rango con envíos aceptados -->
+          <div class="card">
+            <div class="card-header">
+              <h2>Disponibilidad por cliente</h2>
+              <div class="flex-1"></div>
+              <span class="text-xs text-text-dim">{{ bucket() === 'hour' ? 'horas' : 'días' }} con envíos aceptados</span>
+            </div>
+            <div class="card-body">
+              @if (uptime().length === 0) {
+                <div class="text-center text-text-dim py-8">Sin envíos en el rango seleccionado.</div>
+              }
+              @for (u of uptime(); track u.client) {
+                <div class="hrow">
+                  <span class="hname">{{ label(u.client) }}</span>
+                  <div class="meter"><div class="meter-fill" [style.width.%]="u.pct" [style.background]="u.color"></div></div>
+                  <span class="hval" style="width: 92px;">{{ u.on }}/{{ u.total }} · {{ u.pct }}%</span>
+                </div>
+              }
+              <p class="text-xs text-text-dim mt-2 mb-0">
+                Un {{ bucket() === 'hour' ? 'bloque de 1 h' : 'día' }} cuenta como "en línea" si el cliente tuvo
+                al menos un envío aceptado. Un cliente con auto-envío pausado marcará baja disponibilidad.
+              </p>
+            </div>
+          </div>
+
           <!-- Tabla: vehículos con fallos (vista de tabla / relief) -->
           <div class="card">
             <div class="card-header"><h2>Vehículos con fallos</h2></div>
@@ -195,6 +232,7 @@ interface TipRow { label: string; value: number; color: string; }
               @if (topErrors().length === 0) {
                 <div class="text-center text-text-dim py-8">Sin fallos en el rango 🎉</div>
               } @else {
+                <div style="overflow-x: auto;">
                 <table class="mtable">
                   <thead><tr><th>Patente</th><th>Servicio</th><th class="num">Fallos</th><th>Último</th><th>Detalle</th></tr></thead>
                   <tbody>
@@ -209,6 +247,7 @@ interface TipRow { label: string; value: number; color: string; }
                     }
                   </tbody>
                 </table>
+                </div>
               }
             </div>
           </div>
@@ -274,6 +313,8 @@ interface TipRow { label: string; value: number; color: string; }
     .hseg { height: 100%; min-width: 2px; }
     .hseg.last { border-radius: 0 4px 4px 0; }
     .hval { width: 52px; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+    .meter { flex: 1; height: 10px; border-radius: 5px; background: var(--bg-soft); overflow: hidden; }
+    .meter-fill { height: 100%; border-radius: 5px; min-width: 2px; }
     .mtable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
     .mtable th {
       text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
@@ -307,6 +348,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
   hours = signal(24);
   loading = signal(true);
   refreshing = signal(false);
+  error = signal<string | null>(null);
   showTable = signal(false);
   hoverIdx = signal(-1);
   tipX = signal(0);
@@ -459,6 +501,22 @@ export class MetricasComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Disponibilidad: fracción de buckets del rango con >=1 envío aceptado por cliente
+  uptime = computed(() => {
+    const total = this.buckets().length;
+    if (!total) return [];
+    const on = new Map<string, number>();
+    for (const r of this.series()) {
+      if (r.aceptados > 0) on.set(r.client, (on.get(r.client) || 0) + 1);
+    }
+    return this.activeClients().map((c) => {
+      const n = Math.min(on.get(c) || 0, total);
+      const pct = Math.round((n / total) * 100);
+      const color = pct >= 90 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--err)';
+      return { client: c, on: n, total, pct, color };
+    }).sort((a, b) => b.pct - a.pct);
+  });
+
   hSegs(c: ClientRow) {
     const parts = [
       { kind: 'ok', label: 'aceptados', value: c.aceptados, color: 'var(--ok)' },
@@ -499,6 +557,10 @@ export class MetricasComponent implements OnInit, OnDestroy {
       this.byClient.set(r.byClient || []);
       this.topErrors.set(r.topErrors || []);
       this.prev.set(r.prev || { total: 0, aceptados: 0 });
+      this.error.set(null);
+    } catch (err: any) {
+      // El 401 lo redirige el interceptor; cualquier otro error se muestra con reintento
+      this.error.set(err?.error?.error || err?.message || String(err));
     } finally {
       this.loading.set(false);
       this.refreshing.set(false);
