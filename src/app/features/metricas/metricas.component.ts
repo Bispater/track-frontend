@@ -67,7 +67,14 @@ interface TipRow { label: string; value: number; color: string; }
     @if (loading()) {
       <app-loading-card msg="Cargando métricas…" />
     } @else if (!error()) {
-      <div [style.opacity]="refreshing() ? 0.55 : 1" style="transition: opacity 0.15s;">
+      <div style="position: relative;">
+      @if (refreshing()) {
+        <div class="load-overlay">
+          <span class="spin-big"></span>
+          <span class="load-msg">Consultando {{ hours() === 168 ? '7 días' : hours() + ' horas' }} de historial…</span>
+        </div>
+      }
+      <div [style.opacity]="refreshing() ? 0.35 : 1" style="transition: opacity 0.15s;">
 
         <!-- KPI row -->
         <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
@@ -141,7 +148,7 @@ interface TipRow { label: string; value: number; color: string; }
                   <!-- grid recesivo -->
                   @for (t of yTicks(); track t.v) {
                     <line [attr.x1]="pl" [attr.x2]="w - pr" [attr.y1]="t.y" [attr.y2]="t.y" class="grid-line" />
-                    <text [attr.x]="pl - 6" [attr.y]="t.y + 3" text-anchor="end" class="ax">{{ fmtN(t.v) }}</text>
+                    <text [attr.x]="pl - 6" [attr.y]="t.y + 3" text-anchor="end" class="ax">{{ fmtTick(t.v) }}</text>
                   }
                   <line [attr.x1]="pl" [attr.x2]="w - pr" [attr.y1]="h - pb" [attr.y2]="h - pb" class="base-line" />
                   <!-- highlight de columna en hover -->
@@ -261,6 +268,7 @@ interface TipRow { label: string; value: number; color: string; }
           </div>
         </div>
       </div>
+      </div>
     }
   `,
   styles: [`
@@ -300,6 +308,17 @@ interface TipRow { label: string; value: number; color: string; }
       background: var(--bg-soft); color: var(--text); border: none; border-left: 1px solid var(--border);
     }
     .rep-btn:hover { background: var(--accent); color: #fff; }
+    .load-overlay {
+      position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
+      align-items: center; padding-top: 130px; gap: 12px; pointer-events: none;
+    }
+    .spin-big {
+      width: 44px; height: 44px; border-radius: 50%; flex: none;
+      border: 4px solid var(--accent-soft); border-top-color: var(--accent);
+      animation: m-spin 0.7s linear infinite;
+    }
+    .load-msg { font-size: 13px; font-weight: 600; color: var(--text); }
+    @keyframes m-spin { to { transform: rotate(360deg); } }
     .kpi { padding: 14px 16px; }
     .kpi-label { font-size: 12px; color: var(--text-dim); font-weight: 600; }
     .kpi-value { font-size: 27px; font-weight: 650; line-height: 1.25; margin: 2px 0; }
@@ -364,6 +383,9 @@ export class MetricasComponent implements OnInit, OnDestroy {
   fmtDate = fmtDate;
 
   hours = signal(24);
+  // Rango efectivamente cargado: el gráfico se dibuja con este, no con la selección,
+  // para no redibujar el eje nuevo con datos viejos mientras llega la respuesta.
+  appliedHours = signal(24);
   loading = signal(true);
   refreshing = signal(false);
   error = signal<string | null>(null);
@@ -412,7 +434,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
   // Ejes de tiempo completos (rellena buckets vacíos)
   buckets = computed(() => {
     const step = this.bucket() === 'hour' ? 3600e3 : 86400e3;
-    const n = this.bucket() === 'hour' ? this.hours() : Math.round(this.hours() / 24);
+    const n = this.bucket() === 'hour' ? this.appliedHours() : Math.round(this.appliedHours() / 24);
     const nowB = Math.floor(Date.now() / step) * step;
     const map = new Map<number, Record<string, number>>();
     for (const r of this.series()) {
@@ -550,6 +572,12 @@ export class MetricasComponent implements OnInit, OnDestroy {
   color(client: string) { return `var(--c-${client}, var(--accent))`; }
   label(client: string) { return CLIENT_LABEL[client] || client; }
   fmtN(n: number) { return (n ?? 0).toLocaleString('es-CL'); }
+  // Ticks del eje Y compactos (100 k, 1,2 M) — los números largos se cortaban contra el borde
+  fmtTick(n: number) {
+    if (n >= 1e6) return (n / 1e6).toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' M';
+    if (n >= 1000) return (n / 1000).toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' k';
+    return String(n);
+  }
   signo(n: number) { return n > 0 ? '+' : ''; }
   deltaClass(n: number, mode: 'up-good' | 'neutral') {
     if (n === 0) return 'flat';
@@ -582,6 +610,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
       this.byClient.set(r.byClient || []);
       this.topErrors.set(r.topErrors || []);
       this.prev.set(r.prev || { total: 0, aceptados: 0 });
+      this.appliedHours.set(this.hours());
       this.error.set(null);
     } catch (err: any) {
       // El 401 lo redirige el interceptor; cualquier otro error se muestra con reintento

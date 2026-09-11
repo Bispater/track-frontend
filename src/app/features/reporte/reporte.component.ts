@@ -91,7 +91,7 @@ const W = 700, H = 190, PL = 44, PR = 6, PT = 8, PB = 20;
           <svg [attr.viewBox]="'0 0 ' + w + ' ' + h" width="100%" style="display:block;">
             @for (t of yTicks(); track t.v) {
               <line [attr.x1]="pl" [attr.x2]="w - pr" [attr.y1]="t.y" [attr.y2]="t.y" stroke="#e5e7ee" stroke-width="1" />
-              <text [attr.x]="pl - 6" [attr.y]="t.y + 3" text-anchor="end" class="ax">{{ fmtN(t.v) }}</text>
+              <text [attr.x]="pl - 6" [attr.y]="t.y + 3" text-anchor="end" class="ax">{{ fmtTick(t.v) }}</text>
             }
             <line [attr.x1]="pl" [attr.x2]="w - pr" [attr.y1]="h - pb" [attr.y2]="h - pb" stroke="#9aa1b5" stroke-width="1" />
             @for (s of segs(); track $index) {
@@ -325,6 +325,11 @@ export class ReporteComponent implements OnInit {
   });
 
   fmtN(n: number) { return (n ?? 0).toLocaleString('es-CL'); }
+  fmtTick(n: number) {
+    if (n >= 1e6) return (n / 1e6).toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' M';
+    if (n >= 1000) return (n / 1000).toLocaleString('es-CL', { maximumFractionDigits: 1 }) + ' k';
+    return String(n);
+  }
   fmtFecha(iso: string) { return new Date(iso).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); }
   plate(vid: string) {
     const v = this.store.list().find((x) => x.id === vid);
