@@ -22,7 +22,7 @@ import { IconComponent, IconName } from '../../shared/icon.component';
           <div class="brand-square w-14 h-14 rounded-2xl mb-3">
             <app-icon name="route" [size]="28" />
           </div>
-          <h1 class="text-xl font-bold m-0">track-service</h1>
+          <h1 class="text-xl font-bold m-0">PROASEG</h1>
           <p class="text-sm text-text-dim m-0">Concentrador GPS · panel de control</p>
         </div>
 

@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Subscription, filter } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
 import { ApiService } from '../../core/api.service';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
@@ -24,7 +25,7 @@ interface NavSection { title: string; items: NavItem[]; }
             <app-icon name="route" [size]="20" />
           </div>
           <div class="leading-tight">
-            <div class="font-bold text-[15px]">track-service</div>
+            <div class="font-bold text-[15px]">PROASEG</div>
             <div class="text-[11px] uppercase tracking-wider text-text-dim font-semibold">Concentrador GPS</div>
           </div>
         </div>
@@ -104,6 +105,8 @@ export class LayoutComponent implements OnInit, OnDestroy {
   api = inject(ApiService);
   store = inject(VehicleStoreService);
   theme = inject(ThemeService);
+  private router = inject(Router);
+  private navSub?: Subscription;
 
   pageTitle = signal<string>('');
   cfgLoaded = signal(false);
@@ -157,7 +160,24 @@ export class LayoutComponent implements OnInit, OnDestroy {
   pollAgo = computed(() => relativeTime(this.store.lastPollAt()));
   private tickTimer?: ReturnType<typeof setInterval>;
 
+  // Título del header según la ruta activa (el route.title definido en app.routes.ts)
+  private updatePageTitle() {
+    let r = this.router.routerState.snapshot.root;
+    let title = '';
+    for (;;) {
+      const t = r.routeConfig?.title ?? r.data?.['title'];
+      if (typeof t === 'string') title = t;
+      if (!r.firstChild) break;
+      r = r.firstChild;
+    }
+    this.pageTitle.set(title);
+  }
+
   async ngOnInit() {
+    this.updatePageTitle();
+    this.navSub = this.router.events
+      .pipe(filter((e) => e instanceof NavigationEnd))
+      .subscribe(() => this.updatePageTitle());
     try {
       const cfg = await new Promise<any>((resolve, reject) =>
         this.api.config().subscribe({ next: resolve, error: reject })
@@ -170,6 +190,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
   }
   ngOnDestroy() {
     if (this.tickTimer) clearInterval(this.tickTimer);
+    this.navSub?.unsubscribe();
     this.store.stopPolling();
   }
 }
