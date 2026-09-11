@@ -209,6 +209,7 @@ export class ResumenComponent implements OnInit {
     if (client === 'falabella') return { ...e, service, patente: e.payload?.vehicleId || e.vehicleId, speed: e.payload?.speed?.value ?? null };
     if (client === 'wise') { const p0 = e.payload?.posicion?.[0]; return { ...e, service, patente: p0?.patente || e.vehicleId, speed: p0?.velocidad ?? null }; }
     if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, service, patente: p0?.vehicle_code || e.vehicleId, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
+    if (client === 'qanalytics') return { ...e, service, patente: e.payload?.PLACA || e.vehicleId, speed: e.payload?.VEL ?? null };
     return { ...e, service, patente: e.payload?.patente || e.vehicleId, speed: e.payload?.velocidad ?? null };
   }
 }

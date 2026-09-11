@@ -312,6 +312,8 @@ export class EnviosComponent implements OnInit, OnDestroy {
     if (client === 'wise') { const p0 = e.payload?.posicion?.[0]; return { ...e, kind: client, service, key, patente: p0?.patente || e.vehicleId, eventTs: p0?.fecha_hora, speed: p0?.velocidad ?? null }; }
     if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, kind: client, service, key, patente: p0?.vehicle_code || e.vehicleId, eventTs: p0?.timestamp ? new Date(Number(p0.timestamp)).toISOString() : null, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
     if (client === 'ds') return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fechahora, speed: e.payload?.velocidad ?? null };
+    // qanalytics: payload = item {PLACA, VEL, FH_RPT_GPS en UTC sin sufijo Z}
+    if (client === 'qanalytics') return { ...e, kind: client, service, key, patente: e.payload?.PLACA || e.vehicleId, eventTs: e.payload?.FH_RPT_GPS ? e.payload.FH_RPT_GPS + 'Z' : null, speed: e.payload?.VEL ?? null };
     // bermann
     return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fecha, speed: e.payload?.velocidad ?? null };
   }
