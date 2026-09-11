@@ -76,7 +76,9 @@ import { firstValueFrom } from 'rxjs';
                   <app-badge kind="muted">{{ g.vehicles.length }} vehículos</app-badge>
                   <app-badge [kind]="g.enabled ? 'ok' : 'muted'">{{ g.enabled ? 'auto · cada ' + g.intervalSec + 's' : 'auto pausado' }}</app-badge>
                   <div class="flex-1"></div>
-                  <button class="btn" (click)="$event.stopPropagation(); sendGroup(g)">Enviar grupo</button>
+                  <button class="btn inline-flex items-center gap-2" [disabled]="sendingGroupId() === g.id" (click)="$event.stopPropagation(); sendGroup(g)">
+                    @if (sendingGroupId() === g.id) { <span class="spin spin-light"></span> Enviando… } @else { Enviar grupo }
+                  </button>
                 </div>
                 @if (openId() === g.id) {
                   <div class="card-body">
@@ -118,13 +120,13 @@ import { firstValueFrom } from 'rxjs';
                     } @else {
                       <small class="text-text-dim">sin envíos automáticos aún</small>
                     }
-                    <div class="flex flex-wrap gap-1.5 mt-3">
+                    <div class="flex flex-wrap gap-2 mt-3">
                       @for (vid of g.vehicles; track vid) {
-                        <span class="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-0.5 text-xs rounded"
-                          style="background: var(--bg-soft); border: 1px solid var(--border);">
-                          {{ labelFor(vid) }}
-                          <button class="btn btn-ghost px-1.5 py-0 text-[11px]" (click)="sendOne(g, vid)">↗</button>
-                        </span>
+                        <button class="veh-send" [disabled]="isSending(vid)" (click)="sendOne(g, vid)"
+                          [title]="'Enviar posición de ' + labelFor(vid)">
+                          <span>{{ labelFor(vid) }}</span>
+                          @if (isSending(vid)) { <span class="spin"></span> } @else { <span class="veh-send-arrow">↗</span> }
+                        </button>
                       }
                     </div>
                   </div>
@@ -136,6 +138,24 @@ import { firstValueFrom } from 'rxjs';
       </div>
     }
   `,
+  styles: [`
+    .veh-send {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 7px 12px; font-size: 13px; font-weight: 600;
+      background: var(--bg-soft); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); cursor: pointer;
+    }
+    .veh-send:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .veh-send:disabled { opacity: 0.7; cursor: default; }
+    .veh-send-arrow { color: var(--accent); }
+    .spin {
+      width: 13px; height: 13px; border-radius: 50%; display: inline-block; flex: none;
+      border: 2px solid var(--accent-soft); border-top-color: var(--accent);
+      animation: veh-spin 0.6s linear infinite;
+    }
+    .spin-light { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
+    @keyframes veh-spin { to { transform: rotate(360deg); } }
+  `],
 })
 export class ClientPageComponent implements OnInit {
   private route = inject(ActivatedRoute);
@@ -148,6 +168,9 @@ export class ClientPageComponent implements OnInit {
   groups = signal<Record<string, GroupConfig>>({});
   loading = signal(true);
   openId = signal<string | null>(null);
+  // Envíos en curso: ids de vehículos con send-one activo y grupo con send activo
+  sendingIds = signal<Set<string>>(new Set());
+  sendingGroupId = signal<string | null>(null);
   fmtDate = fmtDate;
 
   groupList = computed(() => Object.values(this.groups()));
@@ -226,20 +249,28 @@ export class ClientPageComponent implements OnInit {
     this.updateGroup(g, { intervalSec: Math.max(5, value) });
   }
 
+  isSending(vid: string) { return this.sendingIds().has(vid); }
+
   async sendOne(g: GroupConfig, vid: string) {
+    if (this.isSending(vid)) return;
     const label = this.labelFor(vid);
+    this.sendingIds.update((s) => new Set(s).add(vid));
     try {
       const r: any = await firstValueFrom(this.api.sendOne(this.client(), { vehicleId: vid, groupId: g.id }));
       console.log(`[${this.client()} send-one]`, r);
       if (r.accepted) this.toast.ok(`${label}: ✓ aceptado`);
       else if (r.ok) this.toast.warn(`${label}: ${r.response?.message || r.message || 'rechazo lógico'}`);
-      else this.toast.err(`${label}: HTTP ${r.status ?? 0} · ${r.error || ''}`);
+      else this.toast.err(`${label}: HTTP ${r.status ?? 0} · ${r.error || r.response?.error || ''}`);
     } catch (err: any) {
       this.toast.err(`${label}: ${err?.message || err}`);
+    } finally {
+      this.sendingIds.update((s) => { const n = new Set(s); n.delete(vid); return n; });
     }
   }
 
   async sendGroup(g: GroupConfig) {
+    if (this.sendingGroupId() === g.id) return;
+    this.sendingGroupId.set(g.id);
     try {
       const r = await firstValueFrom(this.api.sendGroup(this.client(), g.id));
       const results = r.results || [];
@@ -252,6 +283,8 @@ export class ClientPageComponent implements OnInit {
       await this.refresh();
     } catch (err: any) {
       this.toast.err(`Grupo "${g.name}": ${err?.message || err}`);
+    } finally {
+      this.sendingGroupId.set(null);
     }
   }
 }
