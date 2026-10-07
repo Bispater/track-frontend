@@ -4,7 +4,8 @@ export type IconName =
   | 'dashboard' | 'truck' | 'map' | 'send' | 'inbox' | 'logout' | 'chevron-right'
   | 'check' | 'alert' | 'x' | 'refresh' | 'search' | 'plus' | 'eye' | 'copy'
   | 'expand' | 'collapse' | 'building' | 'users' | 'box' | 'package' | 'route'
-  | 'sun' | 'moon' | 'monitor' | 'bell' | 'globe' | 'link' | 'chart';
+  | 'sun' | 'moon' | 'monitor' | 'bell' | 'globe' | 'link' | 'chart'
+  | 'history' | 'crosshair' | 'tag' | 'external';
 
 const PATHS: Record<IconName, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
@@ -36,6 +37,10 @@ const PATHS: Record<IconName, string> = {
   globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18',
   link: 'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
   chart: 'M3 3v18h18M8 17V9M13 17V5M18 17v-7',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3',
+  crosshair: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 1v4M12 19v4M1 12h4M19 12h4',
+  tag: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8zM7 7h.01',
+  external: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
 };
 
 @Component({

@@ -7,11 +7,12 @@ import { ToastService } from '../../core/toast.service';
 import { HotkeysService } from '../../core/hotkeys.service';
 import { ageMinutes, fmtDate, fmtNum, relativeTime, statusFromAge } from '../../core/format.utils';
 import { Subscription } from 'rxjs';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-vehiculos',
   standalone: true,
-  imports: [BadgeComponent, IconComponent, JsonPanelComponent],
+  imports: [BadgeComponent, IconComponent, JsonPanelComponent, RouterLink],
   template: `
     <div class="card">
       <div class="card-header">
@@ -99,6 +100,18 @@ import { Subscription } from 'rxjs';
                           <div class="text-text-dim">HDOP</div><div>{{ p.hdop != null ? p.hdop : '—' }}</div>
                           <div class="text-text-dim">Ignición</div><div>{{ p.ignition || '—' }}</div>
                           <div class="text-text-dim">GPS time</div><div>{{ fmtDate(p.ts) }}</div>
+                        }
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <a class="btn btn-ghost flex items-center gap-1.5" [routerLink]="['/mapa']" [queryParams]="{ v: v.id }" title="Ver posición, recorrido e historial en el mapa">
+                          <app-icon name="map" [size]="14" />
+                          Ver en mapa
+                        </a>
+                        @if (v.position; as p) {
+                          <a class="btn btn-ghost flex items-center gap-1.5" [href]="'https://www.google.com/maps?q=' + p.lat + ',' + p.lng" target="_blank" rel="noopener">
+                            <app-icon name="external" [size]="14" />
+                            Google Maps
+                          </a>
                         }
                       </div>
                       <div class="grid grid-cols-2 gap-4">

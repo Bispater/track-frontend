@@ -141,7 +141,7 @@ Más complejo pero permite servir frontend sin que pase por Node.
 | Layout (sidebar + topbar) | ✅ completo | Polling auto, badges de estado |
 | Resumen | ✅ funcional | KPIs + últimos 15 envíos |
 | Vehículos | ⚠️ stub básico | Falta dropdown expansible + filtro por grupo + pausa al expandir |
-| Mapa | ⚠️ Leaflet básico | Falta popup completo, fit-bounds dinámico, refresh con polling |
+| Mapa | ✅ completo | Íconos de camión por rumbo/estado, 6 mapas base, panel de flota, historial por vehículo (ruta, km, viajes, paradas) vía `/api/vehicles/:id/track` |
 | Envíos | ✅ funcional | Paginación 100 + filtros + detalle inline con JSON panels |
 | TMS / Wise / Drivin / Bermann | ✅ genérico | Mismo componente para los 4 con `data.client` en la ruta |
 | Auth flow | ✅ completo | Guard + interceptor cookie |
@@ -149,7 +149,6 @@ Más complejo pero permite servir frontend sin que pase por Node.
 
 **Próximas iteraciones**:
 - Vehículos: agregar dropdown expansible + filtro por grupo + pausa de refresh al expandir
-- Mapa: integrar con el polling reactivamente
 - Toast de notificaciones (componente compartido)
 - Drag & drop o multi-select para gestión de grupos (si lo necesitas)
 

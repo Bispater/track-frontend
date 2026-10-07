@@ -43,7 +43,7 @@ src/app/
     ├── layout/                   # sidebar + topbar + outlet
     ├── resumen/                  # KPIs + grupos fm-track + envíos recientes
     ├── vehiculos/                # tabla con dropdown expansible
-    ├── mapa/                     # Leaflet reactivo al polling
+    ├── mapa/                     # Leaflet: flota en vivo + historial (ruta/km/viajes/paradas)
     ├── envios/                   # historial paginado con pausa al expandir
     └── clients/
         └── client-page.component.ts  # genérico para TMS/Wise/Drivin/Bermann

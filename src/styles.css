@@ -220,6 +220,51 @@ html, body {
   .seg button.on-prod { background: #ef4444; color: #fff; }
 }
 
-/* Leaflet popup en dark mode */
+/* ===================== Mapa (Leaflet) ===================== */
+/* Estilos globales: los marcadores se generan como HTML fuera del encapsulado de Angular. */
+.leaflet-container { background: var(--bg-soft); font-family: inherit; }
 .leaflet-popup-content-wrapper { background: var(--bg-elev); color: var(--text); }
 .leaflet-popup-tip { background: var(--bg-elev); }
+.leaflet-bar a, .leaflet-bar a:hover { background: var(--bg-elev); color: var(--text); border-bottom-color: var(--border); }
+.leaflet-bar a:hover { background: var(--bg-soft); }
+.leaflet-control-layers { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border) !important; box-shadow: var(--shadow) !important; border-radius: 8px !important; }
+.leaflet-control-layers-expanded { padding: 8px 12px 8px 8px; font-size: 13px; }
+.leaflet-control-layers-separator { border-top-color: var(--border); }
+.leaflet-tooltip { background: var(--bg-elev); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 12px; border-radius: 6px; }
+.leaflet-tooltip-top:before { border-top-color: var(--border); }
+.leaflet-tooltip-bottom:before { border-bottom-color: var(--border); }
+.leaflet-control-attribution { background: rgba(0,0,0,0.35) !important; color: #ddd !important; font-size: 10px; }
+.leaflet-control-attribution a { color: #fff !important; }
+
+/* Marcador de vehículo: camión visto desde arriba, rotado según el rumbo */
+.veh-icon { background: transparent; border: none; }
+.veh-marker { position: relative; width: 100%; height: 100%; }
+.veh-rot { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: transform 0.4s ease; }
+.veh-rot svg { height: 100%; width: auto; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55)); }
+.veh-marker .tk-wheel { fill: #1f2937; }
+.veh-marker .tk-glass { fill: rgba(255, 255, 255, 0.9); }
+.veh-marker .tk-body, .veh-marker .tk-cab { fill: #64748b; stroke: #fff; stroke-width: 1.4; }
+.veh-marker .tk-cab { fill: #475569; }
+.veh-marker.st-moving .tk-body { fill: #22c55e; }  .veh-marker.st-moving .tk-cab { fill: #15803d; }
+.veh-marker.st-idle   .tk-body { fill: #f59e0b; }  .veh-marker.st-idle   .tk-cab { fill: #b45309; }
+.veh-marker.st-stale  .tk-body { fill: #ef4444; }  .veh-marker.st-stale  .tk-cab { fill: #b91c1c; }
+.veh-marker.sel::before {
+  content: ''; position: absolute; inset: -7px; border-radius: 50%;
+  border: 2px solid #6366f1; box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+  animation: veh-pulse 1.6s ease-out infinite;
+}
+@keyframes veh-pulse { 0% { box-shadow: 0 0 0 2px rgba(99,102,241,0.45); } 100% { box-shadow: 0 0 0 12px rgba(99,102,241,0); } }
+.veh-label {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 3px;
+  white-space: nowrap; font-size: 10.5px; font-weight: 600; line-height: 1.2;
+  color: var(--text); background: var(--bg-elev); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; pointer-events: none; box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+/* Paradas del recorrido */
+.stop-icon { background: transparent; border: none; }
+.stop-pin {
+  display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%;
+  background: #f59e0b; color: #fff; font-size: 11px; font-weight: 700; border: 2px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.stop-pin.off { background: #64748b; }

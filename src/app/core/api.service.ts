@@ -69,12 +69,45 @@ export class ApiService {
     return this.http.post<{ results: HistoryEntry[] }>(`/api/${client}/groups/${encodeURIComponent(groupId)}/send`, {});
   }
   sendStats(hours: number) { return this.http.get<any>(`/api/stats/sends?hours=${hours}`); }
+  // Historial de recorrido de un vehículo (lee fm-track vía backend; from/to en ISO UTC)
+  vehicleTrack(id: string, from: string, to: string) {
+    return this.http.get<TrackResponse>(`/api/vehicles/${encodeURIComponent(id)}/track?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  }
   clientHistory(client: ClientId, limit = 300) {
     return this.http.get<{ entries: HistoryEntry[] }>(`/api/${client}/history?limit=${limit}`);
   }
 }
 
 export type ClientId = 'falabella' | 'wise' | 'drivin' | 'bermann' | 'ds' | 'qanalytics';
+
+// ---- Historial de recorrido (GET /api/vehicles/:id/track) ----
+export interface TrackTrip {
+  idx: number; startTs: string; endTs: string;
+  durationSec: number; movingSec: number;
+  distanceKm: number; odometerKm: number | null;
+  maxSpeed: number; avgSpeed: number;
+  start: { lat: number; lng: number }; end: { lat: number; lng: number };
+  points: number;
+}
+export interface TrackStop {
+  idx: number; startTs: string; endTs: string; durationSec: number;
+  lat: number; lng: number; ignitionOff: boolean; ongoing: boolean; points: number;
+}
+export interface TrackSummary {
+  distanceKm: number; odometerKm: number | null;
+  movingSec: number; stoppedSec: number;
+  maxSpeed: number; avgSpeed: number;
+  trips: number; stops: number;
+  firstTs: string | null; lastTs: string | null;
+  points: number; glitches?: number;
+}
+export interface TrackResponse {
+  vehicleId: string; from: string; to: string;
+  pointsTotal: number; truncated: boolean;
+  summary: TrackSummary; trips: TrackTrip[]; stops: TrackStop[];
+  /** Polilínea simplificada: [lat, lng, epochSec, speedKmh] */
+  path: [number, number, number, number][];
+}
 
 export interface GroupConfig {
   id: string;
