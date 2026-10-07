@@ -28,6 +28,7 @@ const STATE_LABEL: Record<VehState, string> = {
 const VIEW_KEY = 'track-service.map.view.v1';
 const BASE_KEY = 'track-service.map.base.v1';
 const LABELS_KEY = 'track-service.map.labels.v1';
+const HIDE_KEY = 'track-service.map.hideOthers.v1';
 const COLORS = { route: '#6366f1', casing: '#ffffff', trip: '#fbbd23', start: '#22c55e', end: '#ef4444' };
 
 // Camión visto desde arriba apuntando al norte (0°); se rota con position.direction.
@@ -75,6 +76,7 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
           <button class="mt-btn" [class.on]="labels()" (click)="toggleLabels()" title="Mostrar nombres (desde zoom 10)"><app-icon name="tag" [size]="15" /></button>
           @if (selectedId()) {
             <button class="mt-btn" [class.on]="follow()" (click)="toggleFollow()" title="Seguir al vehículo seleccionado"><app-icon name="crosshair" [size]="15" /></button>
+            <button class="mt-btn" [class.on]="hideOthers()" (click)="toggleHideOthers()" [title]="hideOthers() ? 'Mostrando solo el vehículo seleccionado · clic para ver los demás' : 'Ocultar los demás vehículos'"><app-icon [name]="hideOthers() ? 'eye-off' : 'eye'" [size]="15" /></button>
           }
         </div>
         <div class="map-legend">
@@ -83,6 +85,14 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
           <span><i class="dot st-idle"></i>Motor encendido</span>
           <span><i class="dot st-off"></i>Detenido</span>
           <span><i class="dot st-stale"></i>Sin reportes</span>
+          @if (track()?.pointsTotal) {
+            <span class="sep"></span>
+            <span><i class="dot route-line"></i>Recorrido</span>
+            <span><i class="dot start"></i>Inicio</span>
+            <span><i class="dot end"></i>Fin</span>
+            <span><i class="dot stop-on"></i>Parada motor encendido</span>
+            <span><i class="dot stop-off"></i>Parada motor apagado</span>
+          }
         </div>
       </div>
 
@@ -115,7 +125,22 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
               <div class="empty">Este vehículo no tiene posición reciente.</div>
             }
 
-            <div class="sec-title"><app-icon name="history" [size]="14" /> Historial</div>
+            <div class="sec-title">
+              <app-icon name="history" [size]="14" /> Historial
+              <button class="lnk ml-auto" [class.on]="showHelp()" (click)="showHelp.set(!showHelp())" title="Cómo se calcula esta información">
+                <app-icon name="help" [size]="14" /> {{ showHelp() ? 'cerrar ayuda' : '¿cómo se calcula?' }}
+              </button>
+            </div>
+            @if (showHelp()) {
+              <div class="help">
+                <p><b>Posiciones.</b> Son los reportes del equipo GPS (fm-track) dentro del rango elegido: suele enviar uno cada 30 a 60 s en movimiento y menos seguido con el motor apagado. El concentrador las guarda en su propia base a medida que llegan, así que el historial no vuelve a consultar fm-track, salvo para completar días anteriores a cuando empezó a guardar. Las horas se muestran en la zona horaria de este navegador.</p>
+                <p><b>Distancia.</b> Suma de los tramos entre posiciones consecutivas. Se descartan saltos imposibles (más de 180 km/h implícitos). Si el equipo reporta odómetro, también se muestra ese valor.</p>
+                <p><b>Viaje.</b> Tramo en movimiento entre dos paradas. Una detención menor a 5 min (semáforo, peaje) no corta el viaje, y una maniobra de menos de 500 m entre dos paradas no cuenta como viaje.</p>
+                <p><b>Parada.</b> 5 min o más sin desplazarse más de 150 m. Si el equipo deja de reportar estando quieto, ese lapso también cuenta como parada. El número es el orden dentro del rango. <i class="dot stop-on"></i> motor encendido · <i class="dot stop-off"></i> motor apagado.</p>
+                <p><b>En el mapa.</b> <i class="dot route-line"></i> recorrido · <i class="dot start"></i> primera posición del rango · <i class="dot end"></i> última · <i class="dot trip-line"></i> viaje resaltado al pinchar uno de la lista.</p>
+                <p><b>Color del camión.</b> <i class="dot st-moving"></i> en movimiento (más de 3 km/h, reporte de menos de 15 min) · <i class="dot st-idle"></i> detenido con motor encendido · <i class="dot st-off"></i> detenido o sin reporte reciente · <i class="dot st-stale"></i> sin reportes hace más de 24 h. El ícono apunta hacia el rumbo del último reporte.</p>
+              </div>
+            }
             <div class="range-row">
               <div class="seg-range">
                 @for (r of ranges; track r.key) {
@@ -136,28 +161,31 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
               } @else {
                 <div class="kpis">
                   <div class="kpi">
-                    <div class="kpi-label">Distancia</div>
+                    <div class="kpi-label" title="Suma de tramos GPS entre posiciones consecutivas">Distancia</div>
                     <div class="kpi-value">{{ fmtNum(t.summary.distanceKm, 1) }} <small>km</small></div>
-                    <div class="kpi-sub">{{ t.summary.odometerKm != null ? 'odómetro: ' + fmtNum(t.summary.odometerKm, 1) + ' km' : 'según GPS' }}</div>
+                    <div class="kpi-sub">{{ t.summary.odometerKm ? 'odómetro: ' + fmtNum(t.summary.odometerKm, 1) + ' km' : 'según GPS' }}</div>
                   </div>
                   <div class="kpi">
-                    <div class="kpi-label">Viajes</div>
+                    <div class="kpi-label" title="Tramos en movimiento entre paradas de 5 min o más">Viajes</div>
                     <div class="kpi-value">{{ t.summary.trips }}</div>
                     <div class="kpi-sub">{{ t.summary.stops }} paradas</div>
                   </div>
                   <div class="kpi">
-                    <div class="kpi-label">En movimiento</div>
+                    <div class="kpi-label" title="Tiempo total de los viajes · detenido = tiempo total de las paradas">En movimiento</div>
                     <div class="kpi-value">{{ fmtDur(t.summary.movingSec) }}</div>
                     <div class="kpi-sub">detenido {{ fmtDur(t.summary.stoppedSec) }}</div>
                   </div>
                   <div class="kpi">
-                    <div class="kpi-label">Velocidad máx.</div>
+                    <div class="kpi-label" title="Máxima reportada por el GPS en el rango · promedio = distancia / tiempo en movimiento">Velocidad máx.</div>
                     <div class="kpi-value">{{ t.summary.maxSpeed }} <small>km/h</small></div>
                     <div class="kpi-sub">promedio {{ fmtNum(t.summary.avgSpeed, 0) }} km/h</div>
                   </div>
                 </div>
                 <div class="hint">
                   {{ t.pointsTotal }} posiciones · {{ fmtDate(t.summary.firstTs) }} → {{ fmtDate(t.summary.lastTs) }}
+                  <span [title]="t.source === 'local' ? 'Servido desde la base local, sin consultar fm-track' : 'Parte del rango era anterior a lo guardado localmente: se completó desde fm-track y quedó guardado'">
+                    · {{ t.source === 'local' ? 'base local' : t.source === 'mixto' ? 'base local + fm-track' : 'fm-track' }}
+                  </span>
                   @if (t.truncated) { <span class="text-warn"> · muestra parcial (rango muy largo)</span> }
                 </div>
 
@@ -169,7 +197,7 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
                   <button class="ev-row" [class.on]="selectedTrip() === tr.idx" (click)="focusTrip(tr)">
                     <span class="ev-n">{{ tr.idx + 1 }}</span>
                     <span class="ev-main">
-                      <b>{{ fmtT(tr.startTs) }}</b> → <b>{{ fmtT(tr.endTs) }}</b>
+                      <span class="ev-time"><b>{{ fmtT(tr.startTs) }}</b> → <b>{{ fmtT(tr.endTs) }}</b></span>
                       <small>{{ fmtDur(tr.durationSec) }} · máx {{ tr.maxSpeed }} km/h · prom {{ fmtNum(tr.avgSpeed, 0) }} km/h</small>
                     </span>
                     <span class="ev-val">{{ fmtNum(tr.distanceKm, 1) }} km</span>
@@ -182,7 +210,7 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
                   <button class="ev-row" (click)="focusStop(st)">
                     <span class="ev-n stop" [class.off]="st.ignitionOff">{{ st.idx + 1 }}</span>
                     <span class="ev-main">
-                      <b>{{ fmtT(st.startTs) }}</b> → <b>{{ st.ongoing ? 'ahora' : fmtT(st.endTs) }}</b>
+                      <span class="ev-time"><b>{{ fmtT(st.startTs) }}</b> → <b>{{ st.ongoing ? 'ahora' : fmtT(st.endTs) }}</b></span>
                       <small>{{ st.ignitionOff ? 'motor apagado' : 'motor encendido' }} · {{ fmtNum(st.lat, 5) }}, {{ fmtNum(st.lng, 5) }}</small>
                     </span>
                     <span class="ev-val">{{ fmtDur(st.durationSec) }}</span>
@@ -227,10 +255,16 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
   `,
   styles: [`
     .map-shell {
-      display: grid; grid-template-columns: 1fr 360px; margin-bottom: 0;
+      display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 26vw, 400px); margin-bottom: 0;
       height: calc(100vh - 110px); min-height: 520px;
     }
-    @media (max-width: 1000px) { .map-shell { grid-template-columns: 1fr; grid-template-rows: 1fr 340px; } }
+    @media (max-width: 1000px) {
+      .map-shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(320px, 55%) minmax(0, 1fr); height: calc(100vh - 100px); }
+    }
+    @media (max-width: 640px) {
+      .map-shell { height: auto; min-height: 0; grid-template-rows: 60vh auto; }
+      .map-legend { font-size: 10px; gap: 8px; max-width: calc(100% - 20px); }
+    }
     .map-area { position: relative; min-width: 0; min-height: 0; }
     .map-el { position: absolute; inset: 0; }
     .map-toolbar { position: absolute; top: 10px; left: 54px; z-index: 800; display: flex; gap: 6px; }
@@ -250,6 +284,18 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
     .dot.big { width: 12px; height: 12px; }
     .dot.st-moving { background: #22c55e; } .dot.st-idle { background: #f59e0b; } .dot.st-stale { background: #ef4444; }
     .dot.st-nodata { background: transparent; border: 1.5px solid var(--text-dim); }
+    .dot.start { background: #22c55e; border: 2px solid #fff; width: 11px; height: 11px; }
+    .dot.end { background: #ef4444; border: 2px solid #fff; width: 11px; height: 11px; }
+    .dot.stop-on { background: #f59e0b; border: 2px solid #fff; width: 11px; height: 11px; }
+    .dot.stop-off { background: #64748b; border: 2px solid #fff; width: 11px; height: 11px; }
+    .dot.route-line { width: 16px; height: 4px; border-radius: 2px; background: #6366f1; }
+    .dot.trip-line { width: 16px; height: 4px; border-radius: 2px; background: #fbbd23; }
+    .map-legend .sep { width: 1px; height: 14px; background: var(--border); }
+    .help { margin: 0 14px 8px; padding: 10px 12px; border-radius: 8px; background: var(--bg-soft); border: 1px solid var(--border); font-size: 12px; line-height: 1.45; }
+    .help p { margin: 0 0 7px; }
+    .help p:last-child { margin-bottom: 0; }
+    .help .dot { vertical-align: middle; margin: 0 1px; }
+    .lnk.on { color: var(--text); }
     .st-text-moving { color: #22c55e; } .st-text-idle { color: #f59e0b; } .st-text-stale { color: #ef4444; }
     .st-text-off, .st-text-nodata { color: var(--text-dim); }
     .state-line { padding: 10px 14px 0; font-size: 12px; font-weight: 700; }
@@ -313,6 +359,7 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
     }
     .ev-n.stop { background: #f59e0b; } .ev-n.stop.off { background: #64748b; }
     .ev-main { display: flex; flex-direction: column; min-width: 0; }
+    .ev-time { white-space: nowrap; }
     .ev-main small { color: var(--text-dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ev-val { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .btn-ghost-sm { padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer; background: transparent; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
@@ -350,6 +397,8 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
   selectedId = signal<string | null>(null);
   follow = signal(false);
   labels = signal(loadJson<boolean>(LABELS_KEY) ?? true);
+  hideOthers = signal(loadJson<boolean>(HIDE_KEY) ?? true);
+  showHelp = signal(false);
   countVisible = signal(0);
   range = signal<RangeKey>('hoy');
   day = signal('');
@@ -536,7 +585,6 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
         m = L.marker(ll, { icon: this.buildIcon(v), riseOnHover: true });
         m.bindTooltip(this.tooltipHtml(v), { direction: 'top', opacity: 1 });
         m.on('click', (e) => { L.DomEvent.stopPropagation(e); this.select(v.id, false); });
-        m.addTo(this.markersLayer);
         this.markers.set(v.id, m);
         this.markerKeys.set(v.id, key);
       } else {
@@ -545,6 +593,7 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
         m.setTooltipContent(this.tooltipHtml(v));
       }
       m.setZIndexOffset(v.id === this.selectedId() ? 1000 : 0);
+      this.setMarkerVisible(v.id, m);
     }
     for (const [id, m] of this.markers) {
       if (!seen.has(id)) { m.remove(); this.markers.delete(id); this.markerKeys.delete(id); }
@@ -566,6 +615,16 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  // Con un vehículo seleccionado y "ocultar los demás" activo, solo ese marcador queda en el mapa.
+  private setMarkerVisible(id: string, m: L.Marker) {
+    const sel = this.selectedId();
+    const visible = !sel || !this.hideOthers() || id === sel;
+    const onMap = this.markersLayer.hasLayer(m);
+    if (visible && !onMap) m.addTo(this.markersLayer);
+    else if (!visible && onMap) this.markersLayer.removeLayer(m);
+  }
+  private applyVisibility() { for (const [id, m] of this.markers) this.setMarkerVisible(id, m); }
+
   private refreshIcons() {
     for (const v of this.store.list()) {
       const m = this.markers.get(v.id);
@@ -575,8 +634,14 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  toggleHideOthers() {
+    this.hideOthers.set(!this.hideOthers());
+    saveJson(HIDE_KEY, this.hideOthers());
+    this.applyVisibility();
+  }
   fitFleet() {
     if (!this.map || !this.markers.size) return;
+    if (this.selectedId() && this.hideOthers()) this.toggleHideOthers();
     const pts = [...this.markers.values()].map((m) => m.getLatLng());
     this.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
   }
@@ -603,6 +668,7 @@ export class MapaComponent implements OnInit, AfterViewInit, OnDestroy {
     this.trackError.set(null);
     this.clearRoute();
     this.refreshIcons();
+    this.applyVisibility();
     for (const [mid, m] of this.markers) m.setZIndexOffset(mid === id ? 1000 : 0);
     this.router.navigate([], { relativeTo: this.route, queryParams: { v: id || null }, queryParamsHandling: 'merge', replaceUrl: true });
     if (id) {

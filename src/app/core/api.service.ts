@@ -104,6 +104,8 @@ export interface TrackSummary {
 export interface TrackResponse {
   vehicleId: string; from: string; to: string;
   pointsTotal: number; truncated: boolean;
+  /** local = base propia · fm-track = traído de fm-track (rango anterior a lo guardado) · mixto */
+  source: 'local' | 'fm-track' | 'mixto'; localCount: number; fetchedFm: number;
   summary: TrackSummary; trips: TrackTrip[]; stops: TrackStop[];
   /** Polilínea simplificada: [lat, lng, epochSec, speedKmh] */
   path: [number, number, number, number][];

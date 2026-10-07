@@ -5,7 +5,7 @@ export type IconName =
   | 'check' | 'alert' | 'x' | 'refresh' | 'search' | 'plus' | 'eye' | 'copy'
   | 'expand' | 'collapse' | 'building' | 'users' | 'box' | 'package' | 'route'
   | 'sun' | 'moon' | 'monitor' | 'bell' | 'globe' | 'link' | 'chart'
-  | 'history' | 'crosshair' | 'tag' | 'external';
+  | 'history' | 'crosshair' | 'tag' | 'external' | 'help' | 'eye-off';
 
 const PATHS: Record<IconName, string> = {
   dashboard: 'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
@@ -41,6 +41,8 @@ const PATHS: Record<IconName, string> = {
   crosshair: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 1v4M12 19v4M1 12h4M19 12h4',
   tag: 'M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8zM7 7h.01',
   external: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
+  help: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
+  'eye-off': 'M17.9 17.9A10 10 0 0 1 12 19c-7 0-10-7-10-7a17 17 0 0 1 4.1-4.9M9.9 4.2A9 9 0 0 1 12 5c7 0 10 7 10 7a17 17 0 0 1-2 2.9M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20',
 };
 
 @Component({
