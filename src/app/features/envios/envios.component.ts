@@ -6,6 +6,7 @@ import { IconComponent } from '../../shared/icon.component';
 import { SkeletonRowComponent } from '../../shared/skeleton.component';
 import { HotkeysService } from '../../core/hotkeys.service';
 import { fmtDate } from '../../core/format.utils';
+import { ErrorHint, explainError } from '../../core/error-hints';
 import { Subscription, firstValueFrom } from 'rxjs';
 
 interface UnifiedSend extends HistoryEntry {
@@ -131,6 +132,10 @@ const RETENTION_DAYS = 7;
                         <span class="text-text-dim">Vehicle ID</span><span class="font-mono text-xs">{{ e.vehicleId }}</span>
                         <span class="text-text-dim">HTTP</span><span>{{ e.status ?? 0 }}</span>
                         <span class="text-text-dim">Aceptado</span><span>{{ e.accepted ? 'sí' : 'no' }}</span>
+                        @if (!e.accepted && diag(e); as h) {
+                          <span class="text-text-dim">Diagnóstico</span>
+                          <span><b>{{ h.what }}</b> <span class="text-text-dim">{{ h.action }}</span></span>
+                        }
                         @if (e.url) {
                           <span class="text-text-dim">URL</span><span class="text-xs font-mono break-all">{{ e.url }}</span>
                         }
@@ -304,6 +309,12 @@ export class EnviosComponent implements OnInit, OnDestroy {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  // Explicación en lenguaje simple del error (ver core/error-hints.ts)
+  diag(e: UnifiedSend): ErrorHint | null {
+    const text = e.error ? e.error : typeof e.response === 'string' ? e.response : JSON.stringify(e.response ?? '');
+    return explainError(e.service, text, e.status);
   }
 
   private normalize(e: HistoryEntry, client: ClientId, service: string): UnifiedSend {

@@ -3,7 +3,8 @@ import { ApiService, ClientId } from '../../core/api.service';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { LoadingCardComponent } from '../../shared/loading-card.component';
 import { IconComponent } from '../../shared/icon.component';
-import { fmtDate } from '../../core/format.utils';
+import { fmtDate, relativeTime } from '../../core/format.utils';
+import { ErrorHint, HINT_KIND_LABEL, explainError } from '../../core/error-hints';
 import { firstValueFrom } from 'rxjs';
 
 /**
@@ -14,7 +15,8 @@ import { firstValueFrom } from 'rxjs';
 
 interface SeriesRow { bucket: string; client: string; aceptados: number; rechazados: number; errores: number; }
 interface ClientRow { client: string; total: number; aceptados: number; rechazados: number; errores: number; vehiculos: number; }
-interface ErrorRow { vehicle_id: string; client: string; fallos: number; ultimo: string; detalle: string; }
+interface ErrorRow { vehicle_id: string; client: string; fallos: number; ultimo: string; detalle: string; status?: number | null; }
+interface ErrorTypeRow { client: string; detalle: string; status: number | null; fallos: number; vehiculos: number; ultimo: string; }
 
 const CLIENT_ORDER: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
 const CLIENT_LABEL: Record<string, string> = {
@@ -48,7 +50,9 @@ interface TipRow { label: string; value: number; color: string; }
         </div>
       }
       <div class="flex-1"></div>
-      <span class="text-xs text-text-dim">se conservan {{ retentionDays }} días de historial</span>
+      <span class="text-xs text-text-dim">se conservan {{ retentionDays }} días de historial
+        @if (updatedAt()) { · agregados {{ relativeTime(updatedAt()) }} }
+      </span>
       <button class="icon-btn" (click)="refresh()" title="Actualizar"><app-icon name="refresh" [size]="16" /></button>
     </div>
 
@@ -61,6 +65,17 @@ interface TipRow { label: string; value: number; color: string; }
             <div class="text-xs text-text-dim">{{ error() }}</div>
           </div>
           <button class="btn" (click)="refresh()">Reintentar</button>
+        </div>
+      </div>
+    }
+    @if (!loading() && !error() && ready() === false) {
+      <div class="card mb-4" style="border-color: var(--warn);">
+        <div class="card-body flex items-center gap-3">
+          <app-icon name="alert" [size]="18" class="text-warn" />
+          <div class="flex-1 text-sm">
+            <div class="font-semibold">Preparando el índice de métricas por primera vez</div>
+            <div class="text-xs text-text-dim">El backend está recorriendo el historial de envíos en segundo plano. Las cifras se completan solas en unos minutos; los envíos siguen funcionando normal.</div>
+          </div>
         </div>
       </div>
     }
@@ -240,6 +255,39 @@ interface TipRow { label: string; value: number; color: string; }
             </div>
           </div>
 
+          <!-- Errores más comunes: mismo mensaje agrupado, con diagnóstico -->
+          <div class="card">
+            <div class="card-header">
+              <h2>Errores más comunes</h2>
+              <span class="text-xs text-text-dim ml-2">qué respondió cada cliente y qué hacer</span>
+            </div>
+            <div class="card-body">
+              @if (topErrorTypes().length === 0) {
+                <div class="text-center text-text-dim py-8">Sin errores en el rango 🎉</div>
+              } @else {
+                <div class="err-list">
+                  @for (e of topErrorTypes(); track e.client + e.detalle + e.status) {
+                    <div class="err-item">
+                      <div class="err-head">
+                        <span class="leg"><span class="sw" [style.background]="color(e.client)"></span>{{ label(e.client) }}</span>
+                        @if (e.status) { <span class="err-code">HTTP {{ e.status }}</span> }
+                        @if (hint(e.client, e.detalle, e.status); as h) { <span class="err-kind">{{ kindLabel(h) }}</span> }
+                        <span class="flex-1"></span>
+                        <span class="err-n"><b>{{ e.fallos }}</b> fallos · {{ e.vehiculos }} {{ e.vehiculos === 1 ? 'vehículo' : 'vehículos' }} · último {{ relativeTime(e.ultimo) }}</span>
+                      </div>
+                      <div class="err-msg" [title]="e.detalle">{{ e.detalle }}</div>
+                      @if (hint(e.client, e.detalle, e.status); as h) {
+                        <div class="err-hint"><b>{{ h.what }}</b> {{ h.action }}</div>
+                      } @else {
+                        <div class="err-hint dim">Sin diagnóstico automático para este mensaje. Revisa el detalle en Envíos (filtro "Errores").</div>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+
           <!-- Tabla: vehículos con fallos (vista de tabla / relief) -->
           <div class="card">
             <div class="card-header"><h2>Vehículos con fallos</h2></div>
@@ -257,7 +305,7 @@ interface TipRow { label: string; value: number; color: string; }
                         <td><span class="leg"><span class="sw" [style.background]="color(e.client)"></span>{{ label(e.client) }}</span></td>
                         <td class="num strong">{{ e.fallos }}</td>
                         <td class="text-text-dim whitespace-nowrap">{{ fmtDate(e.ultimo) }}</td>
-                        <td class="text-text-dim detalle">{{ e.detalle }}</td>
+                        <td class="text-text-dim detalle" [title]="hintTitle(e.client, e.detalle, e.status)">{{ e.detalle }}</td>
                       </tr>
                     }
                   </tbody>
@@ -366,6 +414,16 @@ interface TipRow { label: string; value: number; color: string; }
       padding: 4px 10px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer;
       background: transparent; border: 1px solid var(--border); color: var(--text-dim);
     }
+    .err-list { display: flex; flex-direction: column; gap: 10px; }
+    .err-item { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--bg-soft); }
+    .err-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+    .err-code { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: rgba(248,114,114,0.15); color: var(--err); border: 1px solid rgba(248,114,114,0.35); }
+    .err-kind { font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--bg-elev); color: var(--text-dim); border: 1px solid var(--border); }
+    .err-n { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+    .err-msg { font-family: ui-monospace, 'JetBrains Mono', Consolas, monospace; font-size: 11.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .err-hint { font-size: 12px; margin-top: 5px; color: var(--text); }
+    .err-hint b { font-weight: 600; }
+    .err-hint.dim { color: var(--text-dim); }
     .btn-ghost-sm:hover { color: var(--accent); border-color: var(--accent); }
   `],
 })
@@ -399,6 +457,16 @@ export class MetricasComponent implements OnInit, OnDestroy {
   series = signal<SeriesRow[]>([]);
   byClient = signal<ClientRow[]>([]);
   topErrors = signal<ErrorRow[]>([]);
+  topErrorTypes = signal<ErrorTypeRow[]>([]);
+  updatedAt = signal<string | null>(null);
+  ready = signal<boolean | null>(null);
+  relativeTime = relativeTime;
+  hint(client: string, detalle: string, status?: number | null): ErrorHint | null { return explainError(client, detalle, status); }
+  kindLabel(h: ErrorHint) { return HINT_KIND_LABEL[h.kind]; }
+  hintTitle(client: string, detalle: string, status?: number | null) {
+    const h = explainError(client, detalle, status);
+    return h ? `${h.what} ${h.action}` : detalle;
+  }
   prev = signal<{ total: number; aceptados: number }>({ total: 0, aceptados: 0 });
 
   private timer?: ReturnType<typeof setInterval>;
@@ -609,6 +677,9 @@ export class MetricasComponent implements OnInit, OnDestroy {
       this.series.set(r.series || []);
       this.byClient.set(r.byClient || []);
       this.topErrors.set(r.topErrors || []);
+      this.topErrorTypes.set(r.topErrorTypes || []);
+      this.updatedAt.set(r.updatedAt || null);
+      this.ready.set(typeof r.ready === 'boolean' ? r.ready : null);
       this.prev.set(r.prev || { total: 0, aceptados: 0 });
       this.appliedHours.set(this.hours());
       this.error.set(null);
