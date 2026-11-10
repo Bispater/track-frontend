@@ -1,5 +1,6 @@
 import { Component, ElementRef, OnDestroy, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { ApiService, ClientId, HistoryEntry } from '../../core/api.service';
+import { CLIENTS, CLIENT_IDS, clientDef, clientLabel } from '../../core/clients';
 import { BadgeComponent } from '../../shared/badge.component';
 import { JsonPanelComponent } from '../../shared/json-panel.component';
 import { IconComponent } from '../../shared/icon.component';
@@ -49,12 +50,7 @@ const RETENTION_DAYS = 7;
         </div>
         <select class="input" [value]="serviceFilter()" (change)="serviceFilter.set(inputV($event))">
           <option value="">Todos los servicios</option>
-          <option value="Falabella">Falabella</option>
-          <option value="Wise">Wise</option>
-          <option value="Drivin">Drivin</option>
-          <option value="Bermann">Bermann</option>
-          <option value="DS">DS</option>
-          <option value="Qanalytics">Qanalytics</option>
+          @for (c of clients; track c.id) { <option [value]="c.label">{{ c.label }}</option> }
         </select>
         <select class="input" [value]="resultFilter()" (change)="resultFilter.set(inputV($event))">
           <option value="">Todos los resultados</option>
@@ -179,6 +175,7 @@ const RETENTION_DAYS = 7;
 export class EnviosComponent implements OnInit, OnDestroy {
   @ViewChild('searchInput') searchInput?: ElementRef<HTMLInputElement>;
   api = inject(ApiService);
+  clients = CLIENTS;
   private hotkeys = inject(HotkeysService);
   private hkSub?: Subscription;
   entries = signal<UnifiedSend[]>([]);
@@ -293,8 +290,7 @@ export class EnviosComponent implements OnInit, OnDestroy {
   }
 
   async refresh() {
-    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
-    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics' };
+    const clients = CLIENT_IDS;
     try {
       const results = await Promise.all(
         clients.map((c) => firstValueFrom(this.api.clientHistory(c, 500)).catch(() => ({ entries: [] as HistoryEntry[] })))
@@ -302,7 +298,7 @@ export class EnviosComponent implements OnInit, OnDestroy {
       const merged: UnifiedSend[] = [];
       for (let i = 0; i < clients.length; i++) {
         const c = clients[i]; const r = results[i];
-        for (const e of r.entries || []) merged.push(this.normalize(e, c, labels[c]));
+        for (const e of r.entries || []) merged.push(this.normalize(e, c, clientLabel(c)));
       }
       merged.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       this.entries.set(merged);
@@ -318,14 +314,6 @@ export class EnviosComponent implements OnInit, OnDestroy {
   }
 
   private normalize(e: HistoryEntry, client: ClientId, service: string): UnifiedSend {
-    const key = `${client}-${e.ts}-${e.vehicleId}`;
-    if (client === 'falabella') return { ...e, kind: client, service, key, patente: e.payload?.vehicleId || e.vehicleId, eventTs: e.payload?.timestamp, speed: e.payload?.speed?.value ?? null };
-    if (client === 'wise') { const p0 = e.payload?.posicion?.[0]; return { ...e, kind: client, service, key, patente: p0?.patente || e.vehicleId, eventTs: p0?.fecha_hora, speed: p0?.velocidad ?? null }; }
-    if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, kind: client, service, key, patente: p0?.vehicle_code || e.vehicleId, eventTs: p0?.timestamp ? new Date(Number(p0.timestamp)).toISOString() : null, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
-    if (client === 'ds') return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fechahora, speed: e.payload?.velocidad ?? null };
-    // qanalytics: payload = item {PLACA, VEL, FH_RPT_GPS en UTC sin sufijo Z}
-    if (client === 'qanalytics') return { ...e, kind: client, service, key, patente: e.payload?.PLACA || e.vehicleId, eventTs: e.payload?.FH_RPT_GPS ? e.payload.FH_RPT_GPS + 'Z' : null, speed: e.payload?.VEL ?? null };
-    // bermann
-    return { ...e, kind: client, service, key, patente: e.payload?.patente || e.vehicleId, eventTs: e.payload?.fecha, speed: e.payload?.velocidad ?? null };
+    return { ...e, kind: client, service, key: `${client}-${e.ts}-${e.vehicleId}`, ...clientDef(client)!.summarize(e) };
   }
 }

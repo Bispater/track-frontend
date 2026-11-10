@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import type { ClientId } from './clients';
 
 export interface AppConfig {
   fmTrackBaseUrl: string;
@@ -34,7 +35,7 @@ export interface HistoryEntry {
 
 /**
  * Cliente HTTP centralizado para hablar con el backend Node/Express.
- * Cada cliente (Falabella, Wise, Drivin, Bermann) tiene su prefijo.
+ * Cada cliente (ver core/clients.ts) tiene su prefijo /api/<id>.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -78,7 +79,7 @@ export class ApiService {
   }
 }
 
-export type ClientId = 'falabella' | 'wise' | 'drivin' | 'bermann' | 'ds' | 'qanalytics';
+export type { ClientId } from './clients';
 
 // ---- Historial de recorrido (GET /api/vehicles/:id/track) ----
 export interface TrackTrip {

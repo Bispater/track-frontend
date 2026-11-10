@@ -7,6 +7,7 @@ import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { ThemeService } from '../../core/theme.service';
 import { relativeTime } from '../../core/format.utils';
 import { IconComponent, IconName } from '../../shared/icon.component';
+import { CLIENTS } from '../../core/clients';
 import { ToastHostComponent } from '../../shared/toast-host.component';
 
 interface NavItem { path: string; label: string; sub: string; icon: IconName; }
@@ -141,14 +142,7 @@ export class LayoutComponent implements OnInit, OnDestroy {
     },
     {
       title: 'Clientes',
-      items: [
-        { path: '/tms', label: 'TMS Falabella', sub: 'Test / Prod', icon: 'building' },
-        { path: '/wise', label: 'Wise', sub: 'Wisetrack', icon: 'package' },
-        { path: '/drivin', label: 'Drivin', sub: 'Posiciones', icon: 'box' },
-        { path: '/bermann', label: 'Bermann', sub: 'Concentrador', icon: 'inbox' },
-        { path: '/ds', label: 'DS', sub: 'postDataGPS', icon: 'package' },
-        { path: '/qanalytics', label: 'Qanalytics', sub: 'Q Integración', icon: 'box' },
-      ],
+      items: CLIENTS.map((c) => ({ path: '/' + c.path, label: c.menuLabel, sub: c.menuSub, icon: c.icon })),
     },
     {
       title: 'Auditoría',

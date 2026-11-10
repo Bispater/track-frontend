@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService, ClientId, GroupConfig } from '../../core/api.service';
+import { clientDef } from '../../core/clients';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { ToggleSwitchComponent } from '../../shared/toggle-switch.component';
 import { LoadingCardComponent } from '../../shared/loading-card.component';
@@ -11,7 +12,7 @@ import { fmtDate } from '../../core/format.utils';
 import { firstValueFrom } from 'rxjs';
 
 /**
- * Página genérica reutilizable para cada cliente (TMS / Wise / Drivin / Bermann).
+ * Página genérica reutilizable para cada cliente (ver core/clients.ts).
  * Recibe el clientId vía route data. Carga config + grupos, renderiza la lista de grupos
  * con dropdown, intervalo, toggle auto-envío y botón "Enviar grupo".
  */
@@ -176,8 +177,8 @@ export class ClientPageComponent implements OnInit {
   groupList = computed(() => Object.values(this.groups()));
   envHint = computed(() => this.client().toUpperCase());
 
-  // ¿Este cliente distingue Test vs Producción con switch por grupo? (Falabella y Qanalytics)
-  hasTestProd = computed(() => this.client() === 'falabella' || this.client() === 'qanalytics');
+  // ¿Este cliente distingue Test vs Producción con switch por grupo? (testProd en core/clients.ts)
+  hasTestProd = computed(() => Boolean(clientDef(this.client())?.testProd));
 
   // Endpoints disponibles del cliente, con su entorno, URL y si tiene credenciales.
   endpoints = computed<{ env: 'test' | 'prod'; label: string; url: string; configured: boolean }[]>(() => {

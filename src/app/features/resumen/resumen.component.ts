@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiService, ClientId, HistoryEntry } from '../../core/api.service';
+import { CLIENT_IDS, clientDef, clientLabel } from '../../core/clients';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { BadgeComponent } from '../../shared/badge.component';
 import { IconComponent } from '../../shared/icon.component';
@@ -185,8 +186,7 @@ export class ResumenComponent implements OnInit {
 
   private async loadAllHistories() {
     this.loadingSends.set(true);
-    const clients: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
-    const labels: Record<ClientId, string> = { falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics' };
+    const clients = CLIENT_IDS;
     try {
       const results = await Promise.all(
         clients.map((c) =>
@@ -196,7 +196,7 @@ export class ResumenComponent implements OnInit {
       const merged: UnifiedSend[] = [];
       for (let i = 0; i < clients.length; i++) {
         const c = clients[i]; const r = results[i];
-        for (const e of r.entries || []) merged.push(this.normalize(e, c, labels[c]));
+        for (const e of r.entries || []) merged.push(this.normalize(e, c, clientLabel(c)));
       }
       merged.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
       this.sends.set(merged);
@@ -206,10 +206,7 @@ export class ResumenComponent implements OnInit {
   }
 
   private normalize(e: HistoryEntry, client: ClientId, service: string): UnifiedSend {
-    if (client === 'falabella') return { ...e, service, patente: e.payload?.vehicleId || e.vehicleId, speed: e.payload?.speed?.value ?? null };
-    if (client === 'wise') { const p0 = e.payload?.posicion?.[0]; return { ...e, service, patente: p0?.patente || e.vehicleId, speed: p0?.velocidad ?? null }; }
-    if (client === 'drivin') { const p0 = e.payload?._json?.[0] || e.payload?.positions?.[0]; return { ...e, service, patente: p0?.vehicle_code || e.vehicleId, speed: p0?.speed != null ? Math.round(Number(p0.speed) * 3.6) : null }; }
-    if (client === 'qanalytics') return { ...e, service, patente: e.payload?.PLACA || e.vehicleId, speed: e.payload?.VEL ?? null };
-    return { ...e, service, patente: e.payload?.patente || e.vehicleId, speed: e.payload?.velocidad ?? null };
+    const { patente, speed } = clientDef(client)!.summarize(e);
+    return { ...e, service, patente, speed };
   }
 }

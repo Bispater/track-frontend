@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { clientDef } from '../../core/clients';
 import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
@@ -13,10 +14,6 @@ import { firstValueFrom } from 'rxjs';
 
 interface SeriesRow { bucket: string; client: string; aceptados: number; rechazados: number; errores: number; }
 interface Bucket { key: number; label: string; aceptados: number; rechazados: number; errores: number; total: number; }
-
-const CLIENT_LABEL: Record<string, string> = {
-  falabella: 'TMS Falabella', wise: 'Wise (Wisetrack)', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics',
-};
 
 // Documento: colores fijos (estado sobre papel blanco)
 const C_OK = '#0ca30c', C_WARN = '#e08e00', C_ERR = '#d03b3b', C_ACCENT = '#4f46e5';
@@ -241,7 +238,7 @@ export class ReporteComponent implements OnInit {
   fallos = signal<{ vehicle_id: string; fallos: number; ultimo: string; detalle: string }[]>([]);
   vehiculos = signal(0);
 
-  clientLabel = computed(() => CLIENT_LABEL[this.client()] || this.client());
+  clientLabel = computed(() => clientDef(this.client())?.reportLabel || this.client());
 
   buckets = computed<Bucket[]>(() => {
     const step = this.bucket() === 'hour' ? 3600e3 : 86400e3;

@@ -15,6 +15,14 @@ const RULES: { test: (t: string, s: number, c: string) => boolean; hint: ErrorHi
     hint: { kind: 'client-config', what: 'La patente no está habilitada en el TMS de Falabella para este ambiente (test/prod).', action: 'Avisar al equipo TMS de Falabella para que la activen. El envío es correcto.' },
   },
   {
+    test: (t) => /patente no habilitada/i.test(t),
+    hint: { kind: 'client-config', what: 'CVX-R no tiene habilitada esta patente para nuestra API key.', action: 'Pedir a CVX-R que la habiliten. Mientras tanto sus posiciones quedan como rechazadas (no se reintentan).' },
+  },
+  {
+    test: (t) => /evento duplicado/i.test(t),
+    hint: { kind: 'info', what: 'CVX-R ya tenía ese evento.', action: 'Nada que hacer: se reenvió una posición que ya habían recibido.' },
+  },
+  {
     test: (t) => /sin posición en últimos 7 días/i.test(t),
     hint: { kind: 'gps', what: 'El equipo GPS del vehículo no reporta hace más de 7 días (apagado, sin señal o desconectado).', action: 'Revisar el equipo. No es un error del cliente ni del concentrador.' },
   },
@@ -23,7 +31,7 @@ const RULES: { test: (t: string, s: number, c: string) => boolean; hint: ErrorHi
     hint: { kind: 'info', what: 'Wise ya tenía exactamente esa posición.', action: 'Nada que hacer: no es un fallo real, el vehículo no se ha movido desde el envío anterior.' },
   },
   {
-    test: (t) => /credenciales .*no configurad/i.test(t),
+    test: (t) => /credenciales .*no configurad|_(TOKEN|KEY) no configurad/i.test(t),
     hint: { kind: 'credentials', what: 'Faltan las credenciales de este cliente en el .env del backend.', action: 'Completar usuario, clave o token en el .env y reiniciar el backend.' },
   },
   {

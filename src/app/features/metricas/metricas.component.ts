@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
-import { ApiService, ClientId } from '../../core/api.service';
+import { ApiService } from '../../core/api.service';
+import { CLIENT_IDS, clientLabel } from '../../core/clients';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { LoadingCardComponent } from '../../shared/loading-card.component';
 import { IconComponent } from '../../shared/icon.component';
@@ -10,7 +11,8 @@ import { firstValueFrom } from 'rxjs';
 /**
  * Métricas · dashboard de gráficos sobre send_history (endpoint /api/stats/sends).
  * Paleta categórica validada (CVD-safe) por cliente, fija por entidad:
- * falabella=azul, wise=naranjo, drivin=aqua, bermann=amarillo, ds=magenta, qanalytics=verde.
+ * falabella=azul, wise=naranjo, drivin=aqua, bermann=amarillo, ds=magenta, qanalytics=verde, cvxr=violeta.
+ * Un cliente nuevo toma el siguiente color de la paleta (--c-<id> en los estilos).
  */
 
 interface SeriesRow { bucket: string; client: string; aceptados: number; rechazados: number; errores: number; }
@@ -18,10 +20,7 @@ interface ClientRow { client: string; total: number; aceptados: number; rechazad
 interface ErrorRow { vehicle_id: string; client: string; fallos: number; ultimo: string; detalle: string; status?: number | null; }
 interface ErrorTypeRow { client: string; detalle: string; status: number | null; fallos: number; vehiculos: number; ultimo: string; }
 
-const CLIENT_ORDER: ClientId[] = ['falabella', 'wise', 'drivin', 'bermann', 'ds', 'qanalytics'];
-const CLIENT_LABEL: Record<string, string> = {
-  falabella: 'Falabella', wise: 'Wise', drivin: 'Drivin', bermann: 'Bermann', ds: 'DS', qanalytics: 'Qanalytics',
-};
+const CLIENT_ORDER: string[] = CLIENT_IDS;
 
 // Geometría del gráfico de columnas
 const W = 760, H = 230, PL = 40, PR = 10, PT = 10, PB = 24;
@@ -323,21 +322,21 @@ interface TipRow { label: string; value: number; color: string; }
     /* Paleta categórica validada (dark por defecto, como el tema de la app) */
     :host {
       --c-falabella: #3987e5; --c-wise: #d95926; --c-drivin: #199e70;
-      --c-bermann: #c98500; --c-ds: #d55181; --c-qanalytics: #008300;
+      --c-bermann: #c98500; --c-ds: #d55181; --c-qanalytics: #008300; --c-cvxr: #9085e9;
     }
     @media (prefers-color-scheme: light) {
       :host {
         --c-falabella: #2a78d6; --c-wise: #eb6834; --c-drivin: #1baf7a;
-        --c-bermann: #eda100; --c-ds: #e87ba4; --c-qanalytics: #008300;
+        --c-bermann: #eda100; --c-ds: #e87ba4; --c-qanalytics: #008300; --c-cvxr: #6250d6;
       }
     }
     :host-context(html[data-theme='dark']) {
       --c-falabella: #3987e5; --c-wise: #d95926; --c-drivin: #199e70;
-      --c-bermann: #c98500; --c-ds: #d55181; --c-qanalytics: #008300;
+      --c-bermann: #c98500; --c-ds: #d55181; --c-qanalytics: #008300; --c-cvxr: #9085e9;
     }
     :host-context(html[data-theme='light']) {
       --c-falabella: #2a78d6; --c-wise: #eb6834; --c-drivin: #1baf7a;
-      --c-bermann: #eda100; --c-ds: #e87ba4; --c-qanalytics: #008300;
+      --c-bermann: #eda100; --c-ds: #e87ba4; --c-qanalytics: #008300; --c-cvxr: #6250d6;
     }
     .seg-range { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
     .seg-range button {
@@ -638,7 +637,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
 
   // ---- helpers ----
   color(client: string) { return `var(--c-${client}, var(--accent))`; }
-  label(client: string) { return CLIENT_LABEL[client] || client; }
+  label(client: string) { return clientLabel(client); }
   fmtN(n: number) { return (n ?? 0).toLocaleString('es-CL'); }
   // Ticks del eje Y compactos (100 k, 1,2 M) — los números largos se cortaban contra el borde
   fmtTick(n: number) {
