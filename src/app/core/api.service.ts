@@ -69,7 +69,10 @@ export class ApiService {
   sendGroup(client: ClientId, groupId: string) {
     return this.http.post<{ results: HistoryEntry[] }>(`/api/${client}/groups/${encodeURIComponent(groupId)}/send`, {});
   }
-  sendStats(hours: number) { return this.http.get<any>(`/api/stats/sends?hours=${hours}`); }
+  // client: solo ese cliente (sin él = todos)
+  sendStats(hours: number, client?: string) {
+    return this.http.get<any>(`/api/stats/sends?hours=${hours}${client ? `&client=${encodeURIComponent(client)}` : ''}`);
+  }
   // Historial de recorrido de un vehículo (lee fm-track vía backend; from/to en ISO UTC)
   vehicleTrack(id: string, from: string, to: string) {
     return this.http.get<TrackResponse>(`/api/vehicles/${encodeURIComponent(id)}/track?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

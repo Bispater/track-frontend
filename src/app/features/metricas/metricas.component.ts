@@ -40,14 +40,14 @@ interface TipRow { label: string; value: number; color: string; }
           <button type="button" [class.on]="hours() === r.hours" (click)="setRange(r.hours)">{{ r.label }}</button>
         }
       </div>
-      @if (activeClients().length) {
-        <div class="rep-box">
-          <select class="rep-sel" [value]="repClient()" (change)="repClient.set($any($event.target).value)">
-            @for (c of activeClients(); track c) { <option [value]="c">{{ label(c) }}</option> }
-          </select>
-          <button class="rep-btn" (click)="openReport()" title="Informe imprimible del cliente para el rango elegido">Informe PDF</button>
-        </div>
-      }
+      <div class="rep-box">
+        <select class="rep-sel" [value]="clientFilter()" (change)="setClient($any($event.target).value)" title="Mostrar solo un cliente">
+          <option value="">Todos los clientes</option>
+          @for (c of clientIds; track c) { <option [value]="c">{{ label(c) }}</option> }
+        </select>
+        <button class="rep-btn" (click)="openReport()" [disabled]="!clientFilter()"
+          [title]="clientFilter() ? 'Informe imprimible del cliente para el rango elegido' : 'Elige un cliente para generar su informe'">Informe PDF</button>
+      </div>
       <div class="flex-1"></div>
       <span class="text-xs text-text-dim">se conservan {{ retentionDays }} días de historial
         @if (updatedAt()) { · agregados {{ relativeTime(updatedAt()) }} }
@@ -354,7 +354,8 @@ interface TipRow { label: string; value: number; color: string; }
       padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
       background: var(--bg-soft); color: var(--text); border: none; border-left: 1px solid var(--border);
     }
-    .rep-btn:hover { background: var(--accent); color: #fff; }
+    .rep-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }
+    .rep-btn:disabled { color: var(--text-dim); cursor: not-allowed; opacity: 0.6; }
     .load-overlay {
       position: absolute; inset: 0; z-index: 10; display: flex; flex-direction: column;
       align-items: center; padding-top: 130px; gap: 12px; pointer-events: none;
@@ -446,7 +447,12 @@ export class MetricasComponent implements OnInit, OnDestroy {
   loading = signal(true);
   refreshing = signal(false);
   error = signal<string | null>(null);
-  repClient = signal<string>('');
+  // Cliente elegido en el filtro ('' = todos): toda la página se carga solo con ese cliente
+  clientFilter = signal<string>('');
+  readonly clientIds = CLIENT_IDS;
+  // Solo se aplica la respuesta del último pedido (cambiar rango o cliente rápido no
+  // debe dejar en pantalla una respuesta vieja que llegó tarde)
+  private reqSeq = 0;
   showTable = signal(false);
   hoverIdx = signal(-1);
   tipX = signal(0);
@@ -657,7 +663,7 @@ export class MetricasComponent implements OnInit, OnDestroy {
   }
 
   openReport() {
-    const c = this.repClient() || this.activeClients()[0];
+    const c = this.clientFilter();
     if (!c) return;
     window.open(`${location.pathname}#/reporte?client=${encodeURIComponent(c)}&hours=${this.hours()}`, '_blank');
   }
@@ -668,10 +674,18 @@ export class MetricasComponent implements OnInit, OnDestroy {
     this.refresh();
   }
 
+  setClient(c: string) {
+    if (this.clientFilter() === c) return;
+    this.clientFilter.set(c);
+    this.refresh();
+  }
+
   async refresh() {
+    const seq = ++this.reqSeq;
     if (!this.loading()) this.refreshing.set(true);
     try {
-      const r = await firstValueFrom(this.api.sendStats(this.hours()));
+      const r = await firstValueFrom(this.api.sendStats(this.hours(), this.clientFilter() || undefined));
+      if (seq !== this.reqSeq) return;
       this.bucket.set(r.bucket === 'day' ? 'day' : 'hour');
       this.series.set(r.series || []);
       this.byClient.set(r.byClient || []);
@@ -683,11 +697,14 @@ export class MetricasComponent implements OnInit, OnDestroy {
       this.appliedHours.set(this.hours());
       this.error.set(null);
     } catch (err: any) {
+      if (seq !== this.reqSeq) return;
       // El 401 lo redirige el interceptor; cualquier otro error se muestra con reintento
       this.error.set(err?.error?.error || err?.message || String(err));
     } finally {
-      this.loading.set(false);
-      this.refreshing.set(false);
+      if (seq === this.reqSeq) {
+        this.loading.set(false);
+        this.refreshing.set(false);
+      }
     }
   }
 
