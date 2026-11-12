@@ -1,7 +1,7 @@
 import { Component, ElementRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { firstValueFrom } from 'rxjs';
-import { ApiService, ApiAccess, ApiAccessVehicle } from '../../core/api.service';
+import { ApiService, ApiAccess, ApiAccessLog, ApiAccessVehicle } from '../../core/api.service';
 import { VehicleStoreService } from '../../core/vehicle-store.service';
 import { ToastService } from '../../core/toast.service';
 import { fmtDate, fmtNum, relativeTime } from '../../core/format.utils';
@@ -11,6 +11,7 @@ import { JsonPanelComponent } from '../../shared/json-panel.component';
 
 interface Draft { nombre: string; usuario: string; limiteMinuto: number; patentes: string[]; }
 interface Revealed { nombre: string; usuario: string; token: string; limiteMinuto: number; nuevo: boolean; }
+type Tab = 'actividad' | 'config' | 'respuesta';
 
 // Misma regla que el backend: solo letras y dígitos, en mayúsculas ("ab-1234" → "AB1234")
 const plain = (s: string) => String(s || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
@@ -20,10 +21,23 @@ const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const USUARIO_RE = /^[a-z0-9][a-z0-9._-]{2,39}$/;
 const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb;
 
+// Resultado de una consulta (api_access_log.resultado) → texto y color
+const RESULTADOS: Record<string, { label: string; cls: string }> = {
+  ok: { label: 'OK', cls: 'badge-ok' },
+  limite: { label: 'Sobre el límite · 429', cls: 'badge-warn' },
+  desactivado: { label: 'Acceso desactivado · 403', cls: 'badge-warn' },
+  token_invalido: { label: 'Token incorrecto · 401', cls: 'badge-err' },
+  usuario_desconocido: { label: 'Usuario no existe · 401', cls: 'badge-err' },
+  sin_credenciales: { label: 'Sin credenciales · 401', cls: 'badge-err' },
+  error: { label: 'Error interno · 500', cls: 'badge-err' },
+};
+const METODOS: Record<string, string> = { basic: 'Usuario y contraseña', bearer: 'Bearer', 'api-key': 'X-API-Key' };
+
 /**
  * Accesos API: credenciales de solo lectura para que un cliente consulte la última posición
  * de las patentes que se le autorizan (GET /api/externo/v1/posiciones). El token completo
- * solo se ve al crearlo o regenerarlo.
+ * solo se ve al crearlo o regenerarlo. Cada consulta (también las rechazadas) queda en el
+ * registro del acceso.
  */
 @Component({
   selector: 'app-accesos',
@@ -43,7 +57,7 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
             <app-icon name="alert" [size]="14" />
             Copia el token ahora: no se vuelve a mostrar. Si se pierde, se genera uno nuevo.
           </div>
-          <div class="grid gap-2 text-sm items-center" style="grid-template-columns: 80px 1fr;">
+          <div class="grid gap-2 text-sm items-center" style="grid-template-columns: 80px minmax(0, 1fr);">
             <div class="text-text-dim">URL</div>
             <div class="url-box"><span class="flex-1">{{ endpointUrl() }}</span>
               <button class="icon-btn copy-btn" (click)="copy(endpointUrl(), 'URL copiada')" title="Copiar"><app-icon name="copy" [size]="14" /></button></div>
@@ -84,18 +98,18 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
 
       @if (editing() === 'new') {
         <div class="p-[18px] border-b" style="border-color: var(--border); background: var(--bg-soft);">
-          <div class="font-semibold text-sm mb-3">Nuevo acceso</div>
+          <div class="font-semibold mb-3">Nuevo acceso</div>
           <ng-container *ngTemplateOutlet="editor" />
         </div>
       }
 
-      <div class="card-body-tight">
+      <div class="card-body-tight overflow-x-auto">
         <table class="tbl">
           <thead>
             <tr>
               <th style="width: 28px;"></th>
-              <th>Nombre</th><th>Usuario</th><th>Patentes</th><th>Límite</th>
-              <th>Último uso</th><th>Consultas</th><th>Activo</th>
+              <th>Acceso</th><th>Patentes</th><th>Límite</th><th>Última consulta</th>
+              <th>Consultas 24 h</th><th>Errores 24 h</th><th>Activo</th>
             </tr>
           </thead>
           <tbody>
@@ -107,8 +121,10 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
                     <app-icon name="chevron-right" [size]="14" />
                   </span>
                 </td>
-                <td class="font-medium">{{ a.nombre }}</td>
-                <td class="font-mono text-xs">{{ a.usuario }}</td>
+                <td>
+                  <div class="font-medium">{{ a.nombre }}</div>
+                  <div class="text-[11px] text-text-dim font-mono">{{ a.usuario }}</div>
+                </td>
                 <td>
                   {{ a.patentes.length }}
                   @if (unknownCount(a.patentes); as n) {
@@ -117,13 +133,19 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
                 </td>
                 <td>{{ a.limiteMinuto }}/min</td>
                 <td>
-                  {{ a.lastUsedAt ? relativeTime(a.lastUsedAt) : 'nunca' }}
-                  @if (a.lastIp) { <div class="text-[11px] text-text-dim font-mono">{{ a.lastIp }}</div> }
+                  @if (a.lastUsedAt) {
+                    <div>{{ relativeTime(a.lastUsedAt) }}</div>
+                    <div class="text-[11px] text-text-dim font-mono">{{ a.lastIp }}</div>
+                  } @else {
+                    <span class="text-text-dim">nunca</span>
+                  }
                 </td>
+                <td class="tabular-nums">{{ fmtNum(a.ok24h) }}</td>
                 <td>
-                  {{ fmtNum(a.consultas) }}
-                  @if (a.limitadas) {
-                    <div class="text-[11px] text-warn" title="Consultas rechazadas por pasar el límite por minuto">{{ fmtNum(a.limitadas) }} sobre el límite</div>
+                  @if (a.errores24h) {
+                    <span class="badge badge-err" [title]="'Último error ' + relativeTime(a.ultimoError)">{{ fmtNum(a.errores24h) }}</span>
+                  } @else {
+                    <span class="text-text-dim">0</span>
                   }
                 </td>
                 <td (click)="$event.stopPropagation()">
@@ -131,27 +153,76 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
                 </td>
               </tr>
               @if (editing() === a.id) {
-                <tr class="no-hover" style="background: var(--bg-soft);">
+                <tr class="no-hover detail-row">
                   <td colspan="8" style="padding: 0;">
-                    <div class="p-5 space-y-4">
-                      <ng-container *ngTemplateOutlet="editor" />
-                      <div class="text-xs text-text-dim">
-                        Token terminado en <span class="font-mono">…{{ a.tokenFin }}</span> ·
-                        creado {{ fmtDate(a.createdAt) }}{{ a.createdBy ? ' por ' + a.createdBy : '' }}
+                    <div class="detail">
+                      <div class="detail-bar">
+                        <div class="tabs">
+                          <button [class.on]="tab() === 'actividad'" (click)="setTab('actividad', a)">
+                            Actividad
+                            @if (a.errores24h) { <span class="tab-count">{{ a.errores24h }}</span> }
+                          </button>
+                          <button [class.on]="tab() === 'config'" (click)="setTab('config', a)">Configuración</button>
+                          <button [class.on]="tab() === 'respuesta'" (click)="setTab('respuesta', a)">Lo que recibe el cliente</button>
+                        </div>
+                        <div class="flex-1"></div>
+                        <button class="btn btn-ghost btn-xs flex items-center gap-1.5" (click)="regenerate(a)">
+                          <app-icon name="refresh" [size]="13" /> Regenerar token
+                        </button>
+                        <button class="btn btn-ghost btn-xs flex items-center gap-1.5 text-err" (click)="remove(a)">
+                          <app-icon name="x" [size]="13" /> Eliminar
+                        </button>
                       </div>
-                      <div class="flex flex-wrap gap-2">
-                        <button class="btn btn-ghost flex items-center gap-1.5" (click)="loadPreview(a)">
-                          <app-icon name="eye" [size]="14" /> Ver lo que recibe el cliente
-                        </button>
-                        <button class="btn btn-ghost flex items-center gap-1.5" (click)="regenerate(a)">
-                          <app-icon name="refresh" [size]="14" /> Regenerar token
-                        </button>
-                        <button class="btn btn-ghost flex items-center gap-1.5 text-err" (click)="remove(a)">
-                          <app-icon name="x" [size]="14" /> Eliminar acceso
-                        </button>
-                      </div>
-                      @if (preview(); as p) {
-                        <app-json-panel title="Respuesta actual de la API para este acceso" [content]="p" />
+
+                      @if (tab() === 'actividad') {
+                        <div class="kpis">
+                          <div class="kpi">
+                            <div class="kpi-label">Última consulta</div>
+                            <div class="kpi-value">{{ a.lastUsedAt ? relativeTime(a.lastUsedAt) : 'nunca' }}</div>
+                            <div class="kpi-sub">{{ a.lastUsedAt ? fmtDate(a.lastUsedAt) + ' · ' + a.lastIp : 'El cliente aún no consulta' }}</div>
+                          </div>
+                          <div class="kpi">
+                            <div class="kpi-label">Respondidas · 24 h</div>
+                            <div class="kpi-value">{{ fmtNum(a.ok24h) }}</div>
+                            <div class="kpi-sub">{{ fmtNum(a.consultas) }} desde que se creó</div>
+                          </div>
+                          <div class="kpi" [class.kpi-err]="a.errores24h">
+                            <div class="kpi-label">Rechazadas · 24 h</div>
+                            <div class="kpi-value">{{ fmtNum(a.errores24h) }}</div>
+                            <div class="kpi-sub">{{ a.ultimoError ? 'última ' + relativeTime(a.ultimoError) : 'Sin errores' }}</div>
+                          </div>
+                          <div class="kpi">
+                            <div class="kpi-label">Token vigente</div>
+                            <div class="kpi-value font-mono">…{{ a.tokenFin }}</div>
+                            <div class="kpi-sub">creado {{ fmtDate(a.createdAt) }}{{ a.createdBy ? ' por ' + a.createdBy : '' }}</div>
+                          </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 mt-4 mb-2">
+                          <div class="font-semibold text-sm">Registro de consultas</div>
+                          <div class="flex-1"></div>
+                          <div class="seg-mini">
+                            <button [class.on]="!soloErrores()" (click)="setSoloErrores(false, a)">Todas</button>
+                            <button [class.on]="soloErrores()" (click)="setSoloErrores(true, a)">Solo rechazadas</button>
+                          </div>
+                          <button class="icon-btn copy-btn" title="Actualizar" (click)="loadRegistro(a)"><app-icon name="refresh" [size]="14" /></button>
+                        </div>
+                        <ng-container *ngTemplateOutlet="logTable; context: { $implicit: registro(), acc: a }" />
+                      }
+
+                      @if (tab() === 'config') {
+                        <ng-container *ngTemplateOutlet="editor" />
+                      }
+
+                      @if (tab() === 'respuesta') {
+                        <div class="text-xs text-text-dim mb-2">
+                          Esto es lo que recibiría el cliente si consultara ahora. Verlo aquí no cuenta como consulta.
+                        </div>
+                        @if (preview(); as p) {
+                          <app-json-panel title="Respuesta de la API para este acceso" [content]="p" />
+                        } @else {
+                          <div class="text-xs text-text-dim">Cargando…</div>
+                        }
                       }
                     </div>
                   </td>
@@ -176,90 +247,167 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
       </div>
     </div>
 
+    @if (sinIdentificar()) {
+      <div class="card">
+        <div class="card-header cursor-pointer" (click)="toggleSinIdent()">
+          <span class="inline-block transition-transform text-text-dim" [style.transform]="sinIdentOpen() ? 'rotate(90deg)' : 'rotate(0deg)'">
+            <app-icon name="chevron-right" [size]="14" />
+          </span>
+          <h2>Intentos rechazados sin acceso identificado</h2>
+          <span class="badge badge-err">{{ fmtNum(sinIdentificar()) }}</span>
+          <span class="text-xs text-text-dim">últimos 7 días</span>
+        </div>
+        @if (sinIdentOpen()) {
+          <div class="card-body">
+            <div class="text-xs text-text-dim mb-2">
+              Consultas con un token que no es de ningún acceso (por ejemplo, uno que ya se regeneró) o sin credenciales.
+              Si un cliente dice que no puede conectarse, búscalo aquí por su IP.
+            </div>
+            <ng-container *ngTemplateOutlet="logTable; context: { $implicit: sinIdentList(), acc: null }" />
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Tabla del registro: acc = acceso abierto (null en los intentos sin identificar) -->
+    <ng-template #logTable let-rows let-acc="acc">
+      <div class="log-wrap">
+        <table class="log">
+          <thead>
+            <tr><th>Fecha y hora</th><th>Resultado</th><th>IP</th><th>Método</th><th>Vehículos</th><th>Detalle</th></tr>
+          </thead>
+          <tbody>
+            @if (rows === null) {
+              <tr><td colspan="6" class="text-text-dim">Cargando…</td></tr>
+            }
+            @for (r of rows || []; track r.id) {
+              <tr>
+                <td class="whitespace-nowrap tabular-nums" [title]="relativeTime(r.ts)">{{ fmtDate(r.ts) }}</td>
+                <td class="whitespace-nowrap"><span [class]="'badge ' + resultado(r).cls">{{ resultado(r).label }}</span></td>
+                <td class="font-mono whitespace-nowrap">{{ r.ip || '—' }}</td>
+                <td class="whitespace-nowrap">{{ metodo(r) }}</td>
+                <td class="tabular-nums whitespace-nowrap">
+                  @if (r.vehiculos != null) {
+                    {{ r.conPosicion }} / {{ r.vehiculos }}
+                  } @else { <span class="text-text-dim">—</span> }
+                </td>
+                <td class="detail-cell">
+                  <div>{{ detalle(r, acc) }}</div>
+                  @if (r.userAgent) { <div class="text-[11px] text-text-dim truncate" [title]="r.userAgent">{{ r.userAgent }}</div> }
+                </td>
+              </tr>
+            }
+            @if (rows && !rows.length) {
+              <tr><td colspan="6" class="text-text-dim py-4">
+                {{ acc ? (soloErrores() ? 'Sin consultas rechazadas.' : 'Sin consultas todavía. Aquí aparecerá cada consulta del cliente, también las que fallen.') : 'Sin intentos.' }}
+              </td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      @if (rows?.length) {
+        <div class="text-[11px] text-text-dim mt-1.5">
+          Últimas {{ rows.length }} · «Vehículos» = con posición / entregados · el registro se guarda 90 días
+        </div>
+      }
+    </ng-template>
+
     <ng-template #editor>
-      <div class="space-y-4">
-        <div class="flex flex-wrap gap-3 items-end">
+      <div class="editor">
+        <div class="ed-fields">
           <label class="field">
             <span>Nombre</span>
-            <input class="input" [value]="draft().nombre" (input)="setNombre(val($event))" placeholder="Empresa o contacto" style="min-width: 260px;" />
+            <input class="input" [value]="draft().nombre" (input)="setNombre(val($event))" placeholder="Empresa o contacto" />
           </label>
           @if (editing() === 'new') {
             <label class="field">
               <span>Usuario</span>
-              <input class="input font-mono" [value]="draft().usuario" (input)="setUsuario(val($event))" placeholder="empresa-x" style="min-width: 200px;" />
+              <input class="input font-mono" [value]="draft().usuario" (input)="setUsuario(val($event))" placeholder="empresa-x" />
             </label>
           }
           <label class="field">
             <span>Consultas por minuto</span>
-            <input class="input" type="number" min="1" max="60" [value]="draft().limiteMinuto" (input)="setLimite(val($event))" style="width: 120px;" />
+            <input class="input" type="number" min="1" max="60" [value]="draft().limiteMinuto" (input)="setLimite(val($event))" />
           </label>
         </div>
 
-        <div>
-          <div class="text-xs font-semibold text-text-dim mb-1.5">Patentes autorizadas ({{ draft().patentes.length }})</div>
-          <div class="flex flex-wrap gap-1.5">
+        <div class="ed-section">
+          <div class="ed-title">
+            Patentes autorizadas <span class="badge badge-muted">{{ draft().patentes.length }}</span>
+            <div class="flex-1"></div>
+            @if (draft().patentes.length) {
+              <button class="link-btn" (click)="setPlates([])">Quitar todas</button>
+            }
+          </div>
+          <div class="chips-box">
             @for (p of draft().patentes; track p) {
               <span class="chip" [class.chip-warn]="!knownPlates().has(p)"
                 [title]="knownPlates().has(p) ? '' : 'No hay ningún vehículo con esta patente en fm-track'">
                 {{ p }}<button (click)="removePlate(p)" title="Quitar">×</button>
               </span>
             } @empty {
-              <span class="text-xs text-text-dim">Ninguna todavía: pégalas o márcalas en la lista.</span>
+              <span class="text-xs text-text-dim">Ninguna todavía: pégalas o márcalas abajo.</span>
             }
           </div>
         </div>
 
-        <div class="grid gap-4" style="grid-template-columns: minmax(220px, 1fr) 2fr;">
-          <div>
-            <div class="text-xs font-semibold text-text-dim mb-1.5">Pegar patentes</div>
-            <textarea class="input w-full font-mono" rows="6" placeholder="DFBY49, AB-1234&#10;una por línea o separadas por coma"
-              [value]="pasteText()" (input)="pasteText.set(val($event))"></textarea>
-            <button class="btn btn-ghost mt-1.5 flex items-center gap-1.5" (click)="addPasted()" [disabled]="!pasteText().trim()">
-              <app-icon name="plus" [size]="14" /> Agregar
-            </button>
-          </div>
-          <div class="min-w-0">
-            <div class="flex gap-2 mb-1.5 items-center">
-              <input class="input flex-1 min-w-0" type="search" placeholder="Buscar patente o nombre…" [value]="pickSearch()" (input)="pickSearch.set(val($event))" />
-              <select class="input" [value]="pickGroup()" (change)="pickGroup.set(val($event))">
-                <option value="">Todos los grupos</option>
-                @for (g of store.fmGroups(); track g.id) {
-                  <option [value]="g.id">{{ g.name }} ({{ g.vehicles.length }})</option>
-                }
-              </select>
-              <button class="btn btn-ghost whitespace-nowrap" (click)="addVisible()" [disabled]="!pickList().length" title="Agrega todas las patentes de la lista filtrada">Marcar todas</button>
+        <div class="ed-section">
+          <div class="ed-title">Agregar patentes</div>
+          <div class="add-grid">
+            <div class="min-w-0">
+              <div class="ed-sub">Pegar una lista</div>
+              <textarea class="input w-full font-mono" rows="8" placeholder="DFBY49, AB-1234&#10;una por línea o separadas por coma"
+                [value]="pasteText()" (input)="pasteText.set(val($event))"></textarea>
+              <button class="btn btn-ghost mt-1.5 flex items-center gap-1.5" (click)="addPasted()" [disabled]="!pasteText().trim()">
+                <app-icon name="plus" [size]="14" /> Agregar
+              </button>
             </div>
-            <div class="pick-list">
-              @for (v of pickList(); track v.id) {
-                <label class="pick-row">
-                  <input type="checkbox" [checked]="draftSet().has(v.patente)" (change)="togglePlate(v.patente)" />
-                  <span class="font-mono font-semibold">{{ v.patente }}</span>
-                  @if (v.nombre && plain(v.nombre) !== v.patente) {
-                    <span class="text-text-dim truncate">{{ v.nombre }}</span>
+            <div class="min-w-0">
+              <div class="ed-sub">Elegir de la flota</div>
+              <div class="pick-tools">
+                <input class="input pick-search" type="search" placeholder="Buscar patente o nombre…" [value]="pickSearch()" (input)="pickSearch.set(val($event))" />
+                <select class="input pick-group" [value]="pickGroup()" (change)="pickGroup.set(val($event))">
+                  <option value="">Todos los grupos</option>
+                  @for (g of store.fmGroups(); track g.id) {
+                    <option [value]="g.id">{{ g.name }} ({{ g.vehicles.length }})</option>
                   }
-                  <span class="flex-1"></span>
-                  <span class="text-[11px] text-text-dim whitespace-nowrap">{{ v.fechaHora ? relativeTime(v.fechaHora) : 'sin posición' }}</span>
-                </label>
-              } @empty {
-                <div class="text-xs text-text-dim p-3">{{ vehicles().length ? 'Sin vehículos para el filtro.' : 'Cargando vehículos…' }}</div>
-              }
+                </select>
+                <button class="btn btn-ghost whitespace-nowrap" (click)="addVisible()" [disabled]="!pickList().length" title="Agrega todas las patentes de la lista filtrada">Marcar todas</button>
+              </div>
+              <div class="pick-list">
+                @for (v of pickList(); track v.id) {
+                  <label class="pick-row">
+                    <input type="checkbox" [checked]="draftSet().has(v.patente)" (change)="togglePlate(v.patente)" />
+                    <span class="font-mono font-semibold">{{ v.patente }}</span>
+                    @if (v.nombre && plain(v.nombre) !== v.patente) {
+                      <span class="text-text-dim truncate">{{ v.nombre }}</span>
+                    }
+                    <span class="flex-1"></span>
+                    <span class="text-[11px] text-text-dim whitespace-nowrap">{{ v.fechaHora ? relativeTime(v.fechaHora) : 'sin posición' }}</span>
+                  </label>
+                } @empty {
+                  <div class="text-xs text-text-dim p-3">{{ vehicles().length ? 'Sin vehículos para el filtro.' : 'Cargando vehículos…' }}</div>
+                }
+              </div>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="ed-foot">
+          @if (formHint(); as h) { <span class="text-xs text-text-dim">{{ h }}</span> }
+          <div class="flex-1"></div>
+          <button class="btn btn-ghost" (click)="cancelEdit()">{{ editing() === 'new' ? 'Cancelar' : 'Descartar cambios' }}</button>
           <button class="btn" (click)="save()" [disabled]="saving() || !canSave()">
             {{ editing() === 'new' ? 'Crear acceso' : 'Guardar cambios' }}
           </button>
-          <button class="btn btn-ghost" (click)="cancel()">Cancelar</button>
-          @if (formHint(); as h) { <span class="text-xs text-text-dim">{{ h }}</span> }
         </div>
       </div>
     </ng-template>
   `,
   styles: [`
-    .field { display: flex; flex-direction: column; gap: 4px; }
-    .field > span { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+    .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .field > span, .ed-title, .ed-sub { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+    .field .input { width: 100%; }
     .chip {
       display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 8px; border-radius: 6px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600;
@@ -268,12 +416,68 @@ const errMsg = (err: any, fb: string) => err?.error?.error || err?.message || fb
     .chip button { border: none; background: transparent; color: var(--text-dim); cursor: pointer; padding: 0 5px; font-size: 15px; line-height: 1; }
     .chip button:hover { color: var(--err); }
     .chip-warn { border-color: var(--warn); color: var(--warn); }
-    .pick-list { max-height: 264px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev); }
-    .pick-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); }
-    .pick-row:last-child { border-bottom: none; }
-    .pick-row:hover { background: var(--bg-soft); }
     .copy-btn { width: 28px; height: 28px; }
     .tbl tbody tr.no-hover:hover { background: var(--bg-soft); cursor: default; }
+
+    /* editor */
+    .editor { display: flex; flex-direction: column; gap: 18px; }
+    .ed-fields { display: flex; flex-wrap: wrap; gap: 12px; }
+    .ed-fields .field { flex: 0 1 340px; }
+    .ed-fields .field:last-child { flex: 0 0 170px; }
+    .ed-section { display: flex; flex-direction: column; gap: 8px; }
+    .ed-title { display: flex; align-items: center; gap: 8px; }
+    .ed-sub { margin-bottom: 6px; text-transform: none; letter-spacing: 0; font-size: 12px; }
+    .chips-box {
+      display: flex; flex-wrap: wrap; gap: 6px; min-height: 42px; padding: 8px;
+      border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev);
+    }
+    .add-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr); gap: 16px; }
+    @media (max-width: 900px) { .add-grid { grid-template-columns: minmax(0, 1fr); } }
+    .pick-tools { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+    .pick-search { flex: 1 1 180px; min-width: 0; }
+    .pick-group { flex: 0 1 220px; min-width: 0; }
+    .pick-list { max-height: 264px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elev); }
+    .pick-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border); min-width: 0; }
+    .pick-row:last-child { border-bottom: none; }
+    .pick-row:hover { background: var(--bg-soft); }
+    .ed-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .link-btn { background: none; border: none; padding: 0; font-size: 12px; color: var(--text-dim); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .link-btn:hover { color: var(--err); text-decoration: underline; }
+
+    /* detalle del acceso */
+    .detail-row { background: var(--bg-soft); }
+    /* contain: el contenido (registro ancho) no ensancha la tabla principal; el registro hace scroll dentro de su caja */
+    .detail { padding: 0 20px 20px; contain: inline-size; }
+    .detail-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tabs { display: flex; gap: 2px; }
+    .tabs button {
+      display: inline-flex; align-items: center; gap: 6px; padding: 11px 14px 9px; font-size: 13px; font-weight: 600;
+      color: var(--text-dim); background: transparent; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer;
+    }
+    .tabs button:hover { color: var(--text); }
+    .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+    .tab-count { background: var(--err); color: #fff; border-radius: 999px; font-size: 10.5px; line-height: 16px; padding: 0 6px; }
+    .btn-xs { padding: 4px 10px; font-size: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .kpi { background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+    .kpi-label { font-size: 10.5px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi-value { font-size: 20px; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kpi-err { border-color: rgba(248,114,114,0.45); }
+    .kpi-err .kpi-value { color: var(--err); }
+    .seg-mini { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-elev); }
+    .seg-mini button { padding: 4px 12px; font-size: 12px; font-weight: 600; background: transparent; border: none; color: var(--text-dim); cursor: pointer; }
+    .seg-mini button + button { border-left: 1px solid var(--border); }
+    .seg-mini button.on { background: var(--accent); color: #fff; }
+    .log-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: auto; max-height: 420px; background: var(--bg-elev); }
+    .log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .log th {
+      position: sticky; top: 0; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--text-dim); font-weight: 600; padding: 7px 10px; border-bottom: 1px solid var(--border); background: var(--bg-soft);
+    }
+    .log td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .log tbody tr:last-child td { border-bottom: none; }
+    .detail-cell { max-width: 420px; min-width: 200px; }
   `],
 })
 export class AccesosComponent implements OnInit, OnDestroy {
@@ -289,9 +493,15 @@ export class AccesosComponent implements OnInit, OnDestroy {
   saving = signal(false);
   /** 'new' = formulario de alta; id = acceso abierto; null = nada */
   editing = signal<string | null>(null);
+  tab = signal<Tab>('actividad');
   draft = signal<Draft>({ nombre: '', usuario: '', limiteMinuto: 2, patentes: [] });
   revealed = signal<Revealed | null>(null);
   preview = signal<any>(null);
+  registro = signal<ApiAccessLog[] | null>(null);
+  soloErrores = signal(false);
+  sinIdentificar = signal(0);
+  sinIdentOpen = signal(false);
+  sinIdentList = signal<ApiAccessLog[] | null>(null);
   pasteText = signal('');
   pickSearch = signal('');
   pickGroup = signal('');
@@ -301,6 +511,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
   endpointUrl = computed(() => location.origin + this.endpoint());
   knownPlates = computed(() => new Set(this.vehicles().map((v) => v.patente).filter(Boolean)));
   draftSet = computed(() => new Set(this.draft().patentes));
+  current = computed(() => this.accesos().find((a) => a.id === this.editing()) || null);
   pickList = computed(() => {
     const q = this.pickSearch().trim().toLowerCase();
     const qp = plain(q);
@@ -312,10 +523,17 @@ export class AccesosComponent implements OnInit, OnDestroy {
       .filter((v) => !q || v.nombre.toLowerCase().includes(q) || (qp && v.patente.includes(qp)))
       .sort((a, b) => a.patente.localeCompare(b.patente));
   });
+  /** Hay cambios sin guardar en el acceso abierto */
+  dirty = computed(() => {
+    const a = this.current();
+    if (!a) return true;
+    const d = this.draft();
+    return d.nombre.trim() !== a.nombre || d.limiteMinuto !== a.limiteMinuto || d.patentes.join(',') !== [...a.patentes].sort().join(',');
+  });
   canSave = computed(() => {
     const d = this.draft();
     return d.nombre.trim().length > 0 && Number.isInteger(d.limiteMinuto) && d.limiteMinuto >= 1 && d.limiteMinuto <= 60
-      && (this.editing() !== 'new' || USUARIO_RE.test(d.usuario));
+      && (this.editing() !== 'new' ? this.dirty() : USUARIO_RE.test(d.usuario));
   });
   formHint = computed(() => {
     const d = this.draft();
@@ -323,6 +541,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
     if (this.editing() === 'new' && !USUARIO_RE.test(d.usuario)) return 'Usuario: 3 a 40 caracteres (minúsculas, números, punto, guion o guion bajo)';
     if (!(d.limiteMinuto >= 1 && d.limiteMinuto <= 60)) return 'Consultas por minuto: entre 1 y 60';
     if (!d.patentes.length) return 'Sin patentes el cliente recibirá una lista vacía';
+    if (this.editing() !== 'new' && !this.dirty()) return 'Sin cambios';
     return '';
   });
 
@@ -332,11 +551,35 @@ export class AccesosComponent implements OnInit, OnDestroy {
   relativeTime = relativeTime;
   val(ev: Event): string { return (ev.target as HTMLInputElement).value; }
 
+  resultado(r: ApiAccessLog) { return RESULTADOS[r.resultado] || { label: `${r.resultado} · ${r.status}`, cls: r.status >= 400 ? 'badge-err' : 'badge-ok' }; }
+  metodo(r: ApiAccessLog) { return r.metodo ? METODOS[r.metodo] || r.metodo : '—'; }
+  /** Explicación corta de cada fila del registro */
+  detalle(r: ApiAccessLog, acc: ApiAccess | null): string {
+    const parts: string[] = [];
+    if (r.resultado === 'token_invalido') {
+      parts.push(r.tokenFin ? `Usó un token terminado en …${r.tokenFin}` : 'Token con formato inválido');
+      if (acc && r.tokenFin) parts.push(`el vigente termina en …${acc.tokenFin}`);
+    }
+    if (r.resultado === 'usuario_desconocido' && r.usuario) parts.push(`Usuario enviado: «${r.usuario}»`);
+    if (!acc && r.usuario && r.resultado !== 'usuario_desconocido') parts.push(`Usuario: ${r.usuario}`);
+    if (r.resultado === 'sin_credenciales') parts.push('No envió usuario ni token');
+    if (r.resultado === 'limite') parts.push('Consultó más seguido de lo permitido');
+    if (r.resultado === 'desactivado') parts.push('El acceso estaba desactivado');
+    if (r.filtro) parts.push(`Filtro: ${r.filtro}`);
+    if (r.resultado === 'ok' && r.ms != null) parts.push(`${r.ms} ms`);
+    return parts.join(' · ') || '—';
+  }
+
   ngOnInit() {
     this.loadList();
     this.loadVehicles();
-    // Último uso y contadores
-    this.timer = setInterval(() => this.loadList(), 30000);
+    // Última consulta, contadores y registro abierto
+    this.timer = setInterval(() => {
+      this.loadList();
+      const a = this.current();
+      if (a && this.tab() === 'actividad') this.loadRegistro(a, true);
+      if (this.sinIdentOpen()) this.loadSinIdent(true);
+    }, 30000);
   }
   ngOnDestroy() { if (this.timer) clearInterval(this.timer); }
 
@@ -344,6 +587,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
     try {
       const r = await firstValueFrom(this.api.accesos());
       this.accesos.set(r.accesos);
+      this.sinIdentificar.set(r.sinIdentificar7d || 0);
       if (r.endpoint) this.endpoint.set(r.endpoint);
     } catch (err) {
       this.toast.err(errMsg(err, 'No se pudieron cargar los accesos'));
@@ -352,6 +596,25 @@ export class AccesosComponent implements OnInit, OnDestroy {
   async loadVehicles() {
     try { this.vehicles.set((await firstValueFrom(this.api.accesoVehiculos())).vehiculos); } catch {}
   }
+  async loadRegistro(a: ApiAccess, silent = false) {
+    if (!silent) this.registro.set(null);
+    try {
+      const r = await firstValueFrom(this.api.accesoRegistro(a.id, this.soloErrores()));
+      if (this.editing() === a.id) this.registro.set(r.registro);
+    } catch (err) {
+      if (!silent) { this.registro.set([]); this.toast.err(errMsg(err, 'No se pudo cargar el registro')); }
+    }
+  }
+  setSoloErrores(v: boolean, a: ApiAccess) { this.soloErrores.set(v); this.loadRegistro(a); }
+  toggleSinIdent() {
+    this.sinIdentOpen.update((v) => !v);
+    if (this.sinIdentOpen()) this.loadSinIdent();
+  }
+  async loadSinIdent(silent = false) {
+    if (!silent) this.sinIdentList.set(null);
+    try { this.sinIdentList.set((await firstValueFrom(this.api.accesosSinIdentificar())).registro); }
+    catch (err) { if (!silent) { this.sinIdentList.set([]); this.toast.err(errMsg(err, 'No se pudieron cargar los intentos')); } }
+  }
 
   unknownCount(patentes: string[]) {
     if (!this.vehicles().length) return 0;
@@ -359,7 +622,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
     return patentes.filter((p) => !known.has(p)).length;
   }
 
-  // ---------- edición ----------
+  // ---------- apertura y pestañas ----------
   startNew() {
     this.usuarioTouched = false;
     this.draft.set({ nombre: '', usuario: '', limiteMinuto: 2, patentes: [] });
@@ -367,14 +630,29 @@ export class AccesosComponent implements OnInit, OnDestroy {
     this.editing.set('new');
   }
   toggleRow(a: ApiAccess) {
-    if (this.editing() === a.id) return this.cancel();
-    this.draft.set({ nombre: a.nombre, usuario: a.usuario, limiteMinuto: a.limiteMinuto, patentes: [...a.patentes] });
+    if (this.editing() === a.id) { this.editing.set(null); return; }
+    this.loadDraft(a);
     this.resetPicker();
+    this.soloErrores.set(false);
     this.editing.set(a.id);
+    this.setTab('actividad', a);
   }
-  cancel() { this.editing.set(null); this.preview.set(null); }
+  setTab(t: Tab, a: ApiAccess) {
+    this.tab.set(t);
+    if (t === 'actividad') this.loadRegistro(a);
+    if (t === 'respuesta') this.loadPreview(a);
+  }
+  private loadDraft(a: ApiAccess) {
+    this.draft.set({ nombre: a.nombre, usuario: a.usuario, limiteMinuto: a.limiteMinuto, patentes: [...a.patentes].sort() });
+  }
+  cancelEdit() {
+    if (this.editing() === 'new') { this.editing.set(null); return; }
+    const a = this.current();
+    if (a) { this.loadDraft(a); this.resetPicker(); }
+  }
   private resetPicker() { this.pasteText.set(''); this.pickSearch.set(''); this.pickGroup.set(''); this.preview.set(null); }
 
+  // ---------- edición ----------
   setNombre(v: string) {
     this.draft.update((d) => ({ ...d, nombre: v, usuario: this.editing() === 'new' && !this.usuarioTouched ? slug(v) : d.usuario }));
   }
@@ -384,7 +662,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
   }
   setLimite(v: string) { this.draft.update((d) => ({ ...d, limiteMinuto: Number(v) })); }
 
-  private setPlates(list: string[]) {
+  setPlates(list: string[]) {
     this.draft.update((d) => ({ ...d, patentes: [...new Set(list.map(plain).filter(Boolean))].sort() }));
   }
   togglePlate(p: string) {
@@ -417,8 +695,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
       } else {
         const id = this.editing()!;
         const r = await firstValueFrom(this.api.updateAcceso(id, { nombre: d.nombre.trim(), patentes: d.patentes, limiteMinuto: d.limiteMinuto }));
-        this.draft.set({ nombre: r.acceso.nombre, usuario: r.acceso.usuario, limiteMinuto: r.acceso.limiteMinuto, patentes: [...r.acceso.patentes] });
-        if (this.preview()) this.loadPreview(r.acceso);
+        this.loadDraft(r.acceso);
         this.toast.ok('Cambios guardados · aplican desde la próxima consulta');
       }
       await this.loadList();
@@ -449,7 +726,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
   }
 
   async remove(a: ApiAccess) {
-    if (!confirm(`¿Eliminar el acceso «${a.nombre}» (${a.usuario})?\n\nSu token deja de funcionar de inmediato.`)) return;
+    if (!confirm(`¿Eliminar el acceso «${a.nombre}» (${a.usuario})?\n\nSu token deja de funcionar de inmediato y se borra su registro de consultas.`)) return;
     try {
       await firstValueFrom(this.api.deleteAcceso(a.id));
       this.editing.set(null);
@@ -461,6 +738,7 @@ export class AccesosComponent implements OnInit, OnDestroy {
   }
 
   async loadPreview(a: ApiAccess) {
+    this.preview.set(null);
     try { this.preview.set(await firstValueFrom(this.api.accesoPreview(a.id))); }
     catch (err) { this.toast.err(errMsg(err, 'No se pudo obtener la vista previa')); }
   }

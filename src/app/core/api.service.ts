@@ -82,7 +82,11 @@ export class ApiService {
   }
 
   // ---- Accesos API (credenciales de solo lectura para clientes) ----
-  accesos() { return this.http.get<{ accesos: ApiAccess[]; endpoint: string }>('/api/accesos'); }
+  accesos() { return this.http.get<{ accesos: ApiAccess[]; endpoint: string; sinIdentificar7d: number }>('/api/accesos'); }
+  accesoRegistro(id: string, soloErrores = false) {
+    return this.http.get<{ registro: ApiAccessLog[] }>(`/api/accesos/${encodeURIComponent(id)}/registro`, { params: soloErrores ? { errores: '1' } : {} });
+  }
+  accesosSinIdentificar() { return this.http.get<{ registro: ApiAccessLog[] }>('/api/accesos/sin-identificar'); }
   accesoVehiculos() { return this.http.get<{ vehiculos: ApiAccessVehicle[] }>('/api/accesos/vehiculos'); }
   createAcceso(body: { nombre: string; usuario: string; patentes: string[]; limiteMinuto: number }) {
     return this.http.post<{ acceso: ApiAccess; token: string }>('/api/accesos', body);
@@ -114,8 +118,31 @@ export interface ApiAccess {
   consultas: number;
   /** Consultas rechazadas por pasar el límite por minuto */
   limitadas: number;
+  /** Del registro, últimas 24 h: consultas respondidas y rechazadas */
+  ok24h: number;
+  errores24h: number;
+  ultimoError: string | null;
 }
 export interface ApiAccessVehicle { id: string; patente: string; nombre: string; fechaHora: string | null; }
+/** Una consulta a la API externa (respondida o rechazada) */
+export interface ApiAccessLog {
+  id: string;
+  ts: string;
+  usuario: string | null;
+  ip: string | null;
+  /** basic | bearer | api-key */
+  metodo: string | null;
+  status: number;
+  /** ok | limite | desactivado | token_invalido | usuario_desconocido | sin_credenciales | error */
+  resultado: string;
+  vehiculos: number | null;
+  conPosicion: number | null;
+  filtro: string | null;
+  /** Últimos 4 caracteres del token rechazado */
+  tokenFin: string | null;
+  userAgent: string | null;
+  ms: number | null;
+}
 
 export type { ClientId } from './clients';
 
