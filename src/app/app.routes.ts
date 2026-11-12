@@ -17,6 +17,7 @@ export const routes: Routes = [
       { path: 'vehiculos', title: 'Vehículos', loadComponent: () => import('./features/vehiculos/vehiculos.component').then((m) => m.VehiculosComponent) },
       { path: 'mapa', title: 'Mapa', loadComponent: () => import('./features/mapa/mapa.component').then((m) => m.MapaComponent) },
       { path: 'envios', title: 'Envíos', loadComponent: () => import('./features/envios/envios.component').then((m) => m.EnviosComponent) },
+      { path: 'accesos-api', title: 'Accesos API', loadComponent: () => import('./features/accesos/accesos.component').then((m) => m.AccesosComponent) },
       // Una página por cliente (core/clients.ts)
       ...CLIENTS.map((c) => ({
         path: c.path, title: c.menuLabel, data: { client: c.id, title: c.pageTitle },

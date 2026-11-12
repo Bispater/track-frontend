@@ -80,7 +80,42 @@ export class ApiService {
   clientHistory(client: ClientId, limit = 300) {
     return this.http.get<{ entries: HistoryEntry[] }>(`/api/${client}/history?limit=${limit}`);
   }
+
+  // ---- Accesos API (credenciales de solo lectura para clientes) ----
+  accesos() { return this.http.get<{ accesos: ApiAccess[]; endpoint: string }>('/api/accesos'); }
+  accesoVehiculos() { return this.http.get<{ vehiculos: ApiAccessVehicle[] }>('/api/accesos/vehiculos'); }
+  createAcceso(body: { nombre: string; usuario: string; patentes: string[]; limiteMinuto: number }) {
+    return this.http.post<{ acceso: ApiAccess; token: string }>('/api/accesos', body);
+  }
+  updateAcceso(id: string, body: Partial<Pick<ApiAccess, 'nombre' | 'patentes' | 'limiteMinuto' | 'enabled'>>) {
+    return this.http.put<{ acceso: ApiAccess }>(`/api/accesos/${encodeURIComponent(id)}`, body);
+  }
+  regenerateAccesoToken(id: string) {
+    return this.http.post<{ acceso: ApiAccess; token: string }>(`/api/accesos/${encodeURIComponent(id)}/token`, {});
+  }
+  deleteAcceso(id: string) { return this.http.delete<{ ok: boolean }>(`/api/accesos/${encodeURIComponent(id)}`); }
+  accesoPreview(id: string) { return this.http.get<any>(`/api/accesos/${encodeURIComponent(id)}/preview`); }
 }
+
+export interface ApiAccess {
+  id: string;
+  nombre: string;
+  usuario: string;
+  /** Últimos 4 caracteres del token (el token completo solo se ve al crearlo o regenerarlo) */
+  tokenFin: string;
+  patentes: string[];
+  limiteMinuto: number;
+  enabled: boolean;
+  createdAt: string | null;
+  createdBy: string | null;
+  updatedAt: string | null;
+  lastUsedAt: string | null;
+  lastIp: string | null;
+  consultas: number;
+  /** Consultas rechazadas por pasar el límite por minuto */
+  limitadas: number;
+}
+export interface ApiAccessVehicle { id: string; patente: string; nombre: string; fechaHora: string | null; }
 
 export type { ClientId } from './clients';
 

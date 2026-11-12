@@ -150,6 +150,12 @@ export class LayoutComponent implements OnInit, OnDestroy {
         { path: '/envios', label: 'Envíos', sub: 'Historial', icon: 'send' },
       ],
     },
+    {
+      title: 'API externa',
+      items: [
+        { path: '/accesos-api', label: 'Accesos API', sub: 'Tokens de solo lectura', icon: 'key' },
+      ],
+    },
   ];
 
   pollAgo = computed(() => relativeTime(this.store.lastPollAt()));
